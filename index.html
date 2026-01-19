@@ -13,22 +13,16 @@
 <body>
   <a-scene>
 
-    <!-- Préchargement du modèle -->
-    <a-assets>
-      <a-asset-item
-        id="banc"
-        src="models/modele/banc.gltf">
-      </a-asset-item>
-    </a-assets>
+   <a-assets>
+  <a-asset-item id="banc" src="models/modele/banc-texture.glb"></a-asset-item>
+</a-assets>
 
-   
-    <!-- Modèle -->
-    
-
-  <a-entity light="type: ambient; intensity: 1"></a-entity>
-  <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
-
-  <a-entity gltf-model="#banc" position="0 0 -3" rotation="0 0 0" scale="100 100 100"></a-entity>
+<a-entity
+  gltf-model="#banc"
+  position="0 0 -3"
+  rotation="0 0 0"
+  scale="100 100 100">
+</a-entity>
 
  
 
