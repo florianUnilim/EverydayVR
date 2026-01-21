@@ -145,7 +145,9 @@
 </head>
 
 <body>
-  <a-scene>
+
+  <!--- SCENE 1  -->
+  <a-scene visible="false">
 
     <!-- Lumières (ton code) -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
@@ -261,12 +263,25 @@
       <a-sky color="#E6D3A3"></a-sky>
     </a-entity>
 
-    <!-- SCENE 2 (ajout, exemple) -->
-    <a-entity id="scene2" data-scene visible="false">
-      <a-sky color="#111"></a-sky>
-      <a-entity position="0 1.6 -2" text="value: Scene 2; color: white; align:center; width:6"></a-entity>
-    </a-entity>
-
   </a-scene>
+
+  <!--- SCENE 2  -->
+
+  <a-scene id="scene2" data-scene visible="true">
+    <a-plane 
+      color="#154e56" 
+      height="100" 
+      width="100" 
+      rotation="-90 0 0" 
+      material="
+        shader: standard;
+        src: #fabricColor;
+        roughnessMap: #fabricRough;
+        normalMap: #fabricNormal;
+        metalness: 0;
+        repeat: 100 100;
+        normalScale: 1 1;
+      ">
+    </a-plane>
 </body>
 </html>
