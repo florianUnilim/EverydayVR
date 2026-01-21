@@ -114,6 +114,11 @@
       <img id="PaperColor" src="/EverydayVR/models/textures/Paper004_1K-JPG_Color.jpg">
       <img id="PaperRough" src="/EverydayVR/models/textures/Paper004_1K-JPG_Roughness.jpg">
       <img id="PaperNormal" src="/EverydayVR/models/textures/Paper004_1K-JPG_NormalGL.jpg">
+
+      <img id="SnowColor" src="/EverydayVR/models/textures/Snow010A_1K-JPG_Color.jpg">
+      <img id="PaperRough" src="/EverydayVR/models/textures/Snow010A_1K-JPG_Roughness.jpg">
+      <img id="PaperNormal" src="/EverydayVR/models/textures/Snow010A_1K-JPG_NormalGL.jpg">
+
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
        
       <img id="montagne-bg" src="/images/bg-montagne.png">
@@ -225,15 +230,15 @@
 
      
       <a-plane
-        color="#ffffff"
+        color="#130A06"
         height="100"
         width="100"
         rotation="-90 0 0"
         material="
           shader: standard;
-          src: #PaperColor;
-          roughnessMap: #PaperRough;
-          normalMap: #PaperNormal;
+          src: #SnowColor;
+          roughnessMap: #SnowRough;
+          normalMap: #SnowNormal;
           metalness: 0;
           repeat: 100 100;
           normalScale: 1 1;
@@ -245,7 +250,7 @@
         src="#montagne-bg"
         position="0 16.450 -51.368"
         rotation="0 0 0"
-        squale="1.7 1.7 1.7"
+        scale="1.7 1.7 1.7"
         width="100"
         height="50">
       </a-image>
