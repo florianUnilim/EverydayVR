@@ -119,6 +119,10 @@
       <img id="SnowRough" src="/EverydayVR/models/textures/Snow010A_1K-JPG_Roughness.jpg">
       <img id="SnowNormal" src="/EverydayVR/models/textures/Snow010A_1K-JPG_NormalGL.jpg">
 
+      <img id="SnowDirtColor" src="/EverydayVR/models/textures/Snow012_1K-JPG_Color.jpg">
+      <img id="SnowDirtRough" src="/EverydayVR/models/textures/Snow012_1K-JPG_Roughness.jpg">
+      <img id="SnowDirtNormal" src="/EverydayVR/models/textures/Snow012_1K-JPG_NormalGL.jpg">
+
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
        
       <img id="montagne-bg" src="/images/bg-montagne.png">
@@ -242,6 +246,23 @@
           src: #SnowColor;
           roughnessMap: #SnowRough;
           normalMap: #SnowNormal;
+          metalness: 0;
+          repeat: 100 100;
+          normalScale: 1 1;
+        ">
+
+      </a-plane>
+
+            <a-plane
+        color="##FFF4f7"
+        height="50"
+        width="50"
+        rotation="-90 0 0"
+        material="
+          shader: standard;
+          src: #SnowDirtColor;
+          roughnessMap: #SnowDirtRough;
+          normalMap: #SnowDirtNormal;
           metalness: 0;
           repeat: 100 100;
           normalScale: 1 1;
