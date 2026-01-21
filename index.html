@@ -5,69 +5,174 @@
   <title>A-frame everyday</title>
 
   <!-- A-FRAME -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  </head>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <body>
-    <a-scene>
+  <script>
+    // Fade + changement de scène
+    AFRAME.registerComponent("scene-switch", {
+      schema: {
+        next: { type: "selector" },
+        fade: { type: "selector" },
+        delay: { type: "number", default: 800 }
+      },
+      init() {
+        this.el.addEventListener("switchscene", () => {
+          const fade = this.data.fade;
+          const next = this.data.next;
 
- <a-entity 
- light="type: ambient; intensity: 0.8">
-</a-entity>
+          fade.setAttribute("material", "opacity", 0);
+          fade.setAttribute("visible", true);
+          fade.emit("fadein");
 
-<a-entity 
-light="type: directional; intensity: 0.8" 
-position="1 2 1">
+          setTimeout(() => {
+            const current = this.el.closest("[data-scene]");
+            if (current) current.setAttribute("visible", false);
+            if (next) next.setAttribute("visible", true);
+            fade.emit("fadeout");
+          }, this.data.delay);
+        });
+      }
+    });
 
-</a-entity>
+    // Assis : move rig -> seatPoint, play sound, switch scene
+    AFRAME.registerComponent("sit-trigger", {
+      schema: {
+        rig: { type: "selector" },
+        seat: { type: "selector" },
+        sfx: { type: "selector" },
+        switcher: { type: "selector" },
+        ms: { type: "number", default: 900 }
+      },
+      init() {
+        this.el.addEventListener("click", () => this.sit()); // souris + trigger VR
+      },
+      sit() {
+        const rig = this.data.rig;
+        const seat = this.data.seat;
+        if (!rig || !seat) return;
 
+        if (this.data.sfx?.components?.sound) this.data.sfx.components.sound.playSound();
+
+        const p = seat.getAttribute("position");
+        rig.setAttribute("animation__sit", {
+          property: "position",
+          to: `${p.x} ${p.y} ${p.z}`,
+          dur: this.data.ms,
+          easing: "easeOutCubic"
+        });
+
+        setTimeout(() => {
+          if (this.data.switcher) this.data.switcher.emit("switchscene");
+        }, this.data.ms + 150);
+      }
+    });
+  </script>
+</head>
+
+<body>
+  <a-scene>
+
+    <!-- Lumières (ton code) -->
+    <a-entity light="type: ambient; intensity: 0.8"></a-entity>
+    <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
+
+    <!-- Assets (fusionnés : textures + banc + sons) -->
     <a-assets>
-  <img id="fabricColor" src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
-  <img id="fabricRough" src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg">
-  <img id="fabricNormal" src="/EverydayVR/models/textures/Fabric019_1K-JPG_NormalGL.jpg">
-  <img id="fabricAlpha" src="/EverydayVR/models/textures/Fabric019_1K-JPG_Opacity.jpg">
-</a-assets>
+      <!-- Textures (ton code) -->
+      <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg" crossorigin="anonymous">
+      <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg" crossorigin="anonymous">
+      <img id="fabricNormal" src="/EverydayVR/models/textures/Fabric019_1K-JPG_NormalGL.jpg" crossorigin="anonymous">
+      <img id="fabricAlpha"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Opacity.jpg" crossorigin="anonymous">
 
+      <!-- Modèle banc (ton code) -->
+      <a-asset-item id="banc" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
 
-  <a-plane 
-  color="#9C8B61" 
-  height="100" 
-  width="100" 
-  rotation="-90 0 0" 
-  material="
-    shader: standard;
-    src: #fabricColor;
-    roughnessMap: #fabricRough;
-    normalMap: #fabricNormal;
-    metalness: 0;
-    repeat: 100 100;
-    normalScale: 1 1;
-  "></a-plane>
+      <!-- Sons (ajout) -->
+      <audio id="seatSfx" src="/EverydayVR/audio/seat.mp3"></audio>
+    </a-assets>
 
- <a-assets>
-  <a-asset-item 
-  id="banc" 
-  src="/EverydayVR/models/banc-no-texture.glb">
-</a-asset-item>
-</a-assets>
+    <!-- RIG caméra (ajout, VR/PC friendly) -->
+    <a-entity id="rig" position="0 1.6 4">
+      <a-camera></a-camera>
 
-<a-entity 
-gltf-model="#banc" 
-position="-1.380 0 -1.040" 
-scale="100 100 100">
-</a-entity>
+      <!-- PC : clic souris -->
+      <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
+    </a-entity>
 
-  
+    <!-- VR Controllers (ajout) -->
+    <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
+    <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
 
-      <!-- Ciel -->
-      <a-sky 
-      color="#E6D3A3"
-      >
-    </a-sky>
+    <!-- Fade overlay (ajout) -->
+    <a-plane
+      id="fade"
+      position="0 1.6 -0.6"
+      width="4" height="4"
+      visible="false"
+      material="color:#000; transparent:true; opacity:0"
+      animation__fadein="property: material.opacity; to: 1; dur: 450; easing: easeOutQuad; startEvents: fadein"
+      animation__fadeout="property: material.opacity; to: 0; dur: 450; easing: easeOutQuad; startEvents: fadeout"
+    ></a-plane>
 
-      
+    <!-- SCENE 1 (tout ton contenu actuel dedans) -->
+    <a-entity id="scene1" data-scene visible="true">
 
-    </a-scene>
-  </body>
-  </html>
+      <!-- son de “s’asseoir” (ajout) -->
+      <a-entity id="seatSound" sound="src:#seatSfx; autoplay:false; volume:1"></a-entity>
+
+      <!-- Sol (ton code) -->
+      <a-plane 
+        color="#9C8B61" 
+        height="100" 
+        width="100" 
+        rotation="-90 0 0" 
+        material="
+          shader: standard;
+          src: #fabricColor;
+          roughnessMap: #fabricRough;
+          normalMap: #fabricNormal;
+          metalness: 0;
+          repeat: 100 100;
+          normalScale: 1 1;
+        ">
+      </a-plane>
+
+      <!-- Banc (ton code) -->
+      <a-entity 
+        id="benchModel"
+        gltf-model="#banc" 
+        position="-1.380 0 -1.500" 
+        scale="100 100 100">
+      </a-entity>
+
+      <!-- Hotspot invisible pour cliquer facilement (ajout) -->
+      <a-box
+        class="clickable"
+        position="-1.380 1.0 -1.500"
+        width="1.6"
+        height="1"
+        depth="0.8"
+        material="opacity:0; transparent:true"
+        sit-trigger="rig:#rig; seat:#seatPoint; sfx:#seatSound; switcher:#switcher; ms:900"
+      ></a-box>
+
+      <!-- Point d'assise (ajout) : ajuste Y/Z pour être bien assis -->
+      <a-entity id="seatPoint" position="-1.380 1.15 -1.25"></a-entity>
+
+      <!-- Switcher (ajout) -->
+      <a-entity id="switcher" scene-switch="next:#scene2; fade:#fade; delay:800"></a-entity>
+
+      <!-- Ciel (ton code) -->
+      <a-sky color="#E6D3A3"></a-sky>
+    </a-entity>
+
+    <!-- SCENE 2 (ajout, exemple) -->
+    <a-entity id="scene2" data-scene visible="false">
+      <a-sky color="#111"></a-sky>
+      <a-entity position="0 1.6 -2" text="value: Scene 2; color: white; align:center; width:6"></a-entity>
+    </a-entity>
+
+  </a-scene>
+</body>
+</html>
