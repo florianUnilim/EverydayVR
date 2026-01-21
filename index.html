@@ -212,8 +212,7 @@
       <!-- Mets ici ton décor 2 (sol, sky, objets, sons...) -->
       <a-sky color="#E6D3A3"></a-sky>
 
-      <!-- Exemple placeholder -->
-      <a-box position="0 1 -2" color="#4CC3D9"></a-box>
+
       <a-entity
         id="benchModel"
         gltf-model="#bancModel"
@@ -221,8 +220,12 @@
         scale="150 150 150">
       </a-entity>
 
+      <a-assets>
+        <img id="montagne-bg" src="/images/bg-montagne.png">
+      </a-assets>
+
       <a-plane
-        color="#151515"
+        color="#ffffff"
         height="100"
         width="100"
         rotation="-90 0 0"
