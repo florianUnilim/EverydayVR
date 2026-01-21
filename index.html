@@ -146,12 +146,30 @@
 
 <body>
 
+
+  <!--- camera, light et compagnie  -->
+  <a-scene>
+     <!-- RIG caméra (ajout, VR/PC friendly) -->
+    <a-entity id="rig" position="0 1.6 4">
+      <a-camera></a-camera>
+
+      <!-- PC : clic souris -->
+      <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
+    </a-entity>
+
+    <!-- VR Controllers (ajout) -->
+    <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
+    <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
+
+     <!-- Lumières (ton code) -->
+    <a-entity light="type: ambient; intensity: 0.8"></a-entity>
+    <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
+  </a-scene>
+
   <!--- SCENE 1  -->
   <a-scene visible="false">
 
-    <!-- Lumières (ton code) -->
-    <a-entity light="type: ambient; intensity: 0.8"></a-entity>
-    <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
+   
 
     <!-- Assets (fusionnés : textures + banc + sons) -->
     <a-assets>
@@ -168,17 +186,7 @@
       <audio id="seatSfx" src=""></audio>
     </a-assets>
  
-    <!-- RIG caméra (ajout, VR/PC friendly) -->
-    <a-entity id="rig" position="0 1.6 4">
-      <a-camera></a-camera>
-
-      <!-- PC : clic souris -->
-      <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
-    </a-entity>
-
-    <!-- VR Controllers (ajout) -->
-    <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
-    <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
+   
 
     <!-- Fade overlay (ajout) -->
     <a-plane
@@ -191,7 +199,7 @@
       animation__fadeout="property: material.opacity; to: 0; dur: 450; easing: easeOutQuad; startEvents: fadeout"
     ></a-plane>
 
-    <!-- SCENE 1 (tout ton contenu actuel dedans) -->
+    
     <a-entity id="scene1" data-scene visible="true">
 
       <!-- son de “s’asseoir” (ajout) -->
@@ -267,7 +275,7 @@
 
   <!--- SCENE 2  -->
 
-  <a-scene id="scene2" data-scene visible="true">
+  <a-scene data-scene visible="true">
     <a-box position="0 1.5 -3" rotation="0 45 0" color="#4CC3D9"></a-box>
     <a-sphere position="2 1.5 -4" radius="1.5" color="#EF2D5E"></a-sphere>
     <a-cylinder position="-1 1.5 -3" radius="0.5" height="3" color="#FFC65D"></a-cylinder>
