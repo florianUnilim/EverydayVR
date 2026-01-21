@@ -107,10 +107,13 @@
 
     <!-- ASSETS (une seule fois) -->
     <a-assets>
-      <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg" crossorigin="anonymous">
-      <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg" crossorigin="anonymous">
-      <img id="fabricNormal" src="/EverydayVR/models/textures/Fabric019_1K-JPG_NormalGL.jpg" crossorigin="anonymous">
+      <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
+      <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg">
+      <img id="fabricNormal" src="/EverydayVR/models/textures/Fabric019_1K-JPG_NormalGL.jpg">
 
+      <img id="PaperColor" src="/EverydayVR/models/textures/Paper004_1K-JPG_Color.jpg">
+      <img id="PaperRough" src="/EverydayVR/models/textures/Paper004_1K-JPG_Roughness.jpg">
+      <img id="PaperNormal" src="/EverydayVR/models/textures/Paper004_1K-JPG-NormalGL.jpg">
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
 
       <!-- Mets un vrai fichier audio sinon ça sert à rien -->
@@ -211,6 +214,22 @@
 
       <!-- Exemple placeholder -->
       <a-box position="0 1 -2" color="#4CC3D9"></a-box>
+      <a-plane
+        color="#151515"
+        height="100"
+        width="100"
+        rotation="-90 0 0"
+        material="
+          shader: standard;
+          src: #PaperColor;
+          roughnessMap: #PaperRough;
+          normalMap: #PaperNormal;
+          metalness: 0;
+          repeat: 100 100;
+          normalScale: 1 1;
+        ">
+      </a-plane>
+
     </a-entity>
 
   </a-scene>
