@@ -210,10 +210,17 @@
     <!-- ========= PHASE 2 ========= -->
     <a-entity id="phase2" visible="true">
       <!-- Mets ici ton décor 2 (sol, sky, objets, sons...) -->
-      <a-sky color="#111"></a-sky>
+      <a-sky color="#E6D3A3"></a-sky>
 
       <!-- Exemple placeholder -->
       <a-box position="0 1 -2" color="#4CC3D9"></a-box>
+      <a-entity
+        id="benchModel"
+        gltf-model="#bancModel"
+        position="-1.380 0 -1.500"
+        scale="150 150 150">
+      </a-entity>
+
       <a-plane
         color="#151515"
         height="100"
