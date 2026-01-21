@@ -62,7 +62,16 @@ scale="100 100 100">
 
       <!-- Ciel -->
       <a-sky 
-      color="#E6D3A3">
+      color="#E6D3A3"
+      material="
+    shader: standard;
+    src: #fabricColor;
+    roughnessMap: #fabricRough;
+    normalMap: #fabricNormal;
+    metalness: 0;
+    repeat: 100 100;
+    normalScale: 1 1;
+  ">>
     </a-sky>
 
       
