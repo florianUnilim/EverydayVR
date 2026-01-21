@@ -67,6 +67,80 @@
         }, this.data.ms + 150);
       }
     });
+
+    AFRAME.registerComponent("sit-zone", {
+  schema: {
+    rig: { type: "selector" },
+    seat: { type: "selector" },
+    switcher: { type: "selector" },
+    sfx: { type: "selector" },
+    key: { type: "string", default: "e" },
+    ms: { type: "number", default: 900 },
+    hint: { type: "selector" } // optionnel
+  },
+
+  init() {
+    this.inside = false;
+
+    // clavier
+    this._onKeyDown = (ev) => {
+      if (!this.inside) return;
+      if (ev.key.toLowerCase() !== this.data.key.toLowerCase()) return;
+      this.sit();
+    };
+    window.addEventListener("keydown", this._onKeyDown);
+  },
+
+  remove() {
+    window.removeEventListener("keydown", this._onKeyDown);
+  },
+
+  tick() {
+    const rig = this.data.rig;
+    if (!rig) return;
+
+    // distance rig <-> zone
+    const rigPos = new THREE.Vector3();
+    const zonePos = new THREE.Vector3();
+    rig.object3D.getWorldPosition(rigPos);
+    this.el.object3D.getWorldPosition(zonePos);
+
+    // on utilise la taille de la zone (box) comme rayon "approx"
+    const g = this.el.getAttribute("geometry");
+    const radius = g ? Math.max(g.width, g.depth) * 0.5 : 1.5;
+
+    const nowInside = rigPos.distanceTo(zonePos) <= radius;
+
+    if (nowInside !== this.inside) {
+      this.inside = nowInside;
+
+      // hint (optionnel)
+      if (this.data.hint) {
+        this.data.hint.setAttribute("visible", this.inside);
+      }
+    }
+  },
+
+  sit() {
+    const rig = this.data.rig;
+    const seat = this.data.seat;
+    if (!rig || !seat) return;
+
+    if (this.data.sfx?.components?.sound) this.data.sfx.components.sound.playSound();
+
+    const p = seat.getAttribute("position");
+    rig.setAttribute("animation__sit", {
+      property: "position",
+      to: `${p.x} ${p.y} ${p.z}`,
+      dur: this.data.ms,
+      easing: "easeOutCubic"
+    });
+
+    setTimeout(() => {
+      if (this.data.switcher) this.data.switcher.emit("switchscene");
+    }, this.data.ms + 150);
+  }
+});
   </script>
 </head>
 
@@ -156,6 +230,26 @@
         material="opacity:0; transparent:true"
         sit-trigger="rig:#rig; seat:#seatPoint; sfx:#seatSound; switcher:#switcher; ms:900"
       ></a-box>
+      <!-- Petit texte d’aide (optionnel) -->
+
+      <a-entity
+        id="sitHint"
+        position="-1.380 1.9 -1.500"
+        text="value: Appuie sur E pour t'asseoir; color: #111; align: center; width: 4"
+        visible="false">
+      </a-entity>
+
+<!-- Zone d'assise invisible autour du banc -->
+      <a-box
+        id="sitZone"
+        position="-1.380 1.0 -1.500"
+        width="4"
+        height="2"
+        depth="4"
+        material="opacity: 0; transparent: true"
+        sit-zone="rig:#rig; seat:#seatPoint; switcher:#switcher; sfx:#seatSound; key:e; ms:900; hint:#sitHint">
+      </a-box>
+
 
       <!-- Point d'assise (ajout) : ajuste Y/Z pour être bien assis -->
       <a-entity id="seatPoint" position="-1.380 1.15 -1.25"></a-entity>
