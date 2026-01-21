@@ -12,19 +12,57 @@
   <body>
     <a-scene>
 
- 
-  <a-plane color="#9C8B61" height="100" width="100" rotation="-90 0 0"></a-plane>
-
- <a-assets>
-  <a-asset-item id="banc" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
+    <a-assets>
+  <img id="fabricColor" src="/EverydayVR/textures/Fabric019_1K_JPG_Color.jpg">
+  <img id="fabricRough" src="/EverydayVR/textures/Fabric019_1K_JPG_Roughness.jpg">
+  <img id="fabricNormal" src="/EverydayVR/textures/Fabric019_1K_JPG_NormalGL.jpg">
+  <img id="fabricAlpha" src="/EverydayVR/textures/Fabric019_1K_JPG_Opacity.jpg">
 </a-assets>
 
-<a-entity gltf-model="#banc" position="0 0 0" scale="100 100 100"></a-entity>
+ <a-entity 
+ light="type: ambient; intensity: 0.8">
+</a-entity>
+
+<a-entity 
+light="type: directional; intensity: 0.8" 
+position="1 2 1">
+</a-entity>
+
+
+  <a-plane 
+  color="#9C8B61" 
+  height="100" 
+  width="100" 
+  rotation="-90 0 0" 
+  material="
+    shader: standard;
+    src: #fabricColor;
+    roughnessMap: #fabricRough;
+    normalMap: #fabricNormal;
+    metalness: 0;
+    repeat: 2 2;
+    normalScale: 1 1;
+  "></a-plane>
+
+ <a-assets>
+  <a-asset-item 
+  id="banc" 
+  src="/EverydayVR/models/banc-no-texture.glb">
+</a-asset-item>
+</a-assets>
+
+<a-entity 
+gltf-model="#banc" 
+position="0 0 0" 
+scale="100 100 100">
+</a-entity>
 
   
 
       <!-- Ciel -->
-      <a-sky color="#E6D3A3"></a-sky>
+      <a-sky 
+      color="#E6D3A3">
+    </a-sky>
 
       
 
