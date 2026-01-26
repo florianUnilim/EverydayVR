@@ -18,24 +18,29 @@
         phase1:{ type: "selector" },
         phase2:{ type: "selector" },
 
-        seat1: { type: "selector" },
-        seat2: { type: "selector" },
+        seat1: { type: "selector" }, // assise phase1
+        seat2: { type: "selector" }, // assise phase2 (spawn assis)
 
+        // Orientation
         targetYaw: { type: "number", default: 180 },
         rotateMs:  { type: "number", default: 700 },
 
-        preDelayMs:   { type: "number", default: 1300 },
-        closeMs:      { type: "number", default: 3000 }, // fermeture 3s
-        blackHoldMs:  { type: "number", default: 1000 }, // noir maintenu
+        // Timing demandé
+        preDelayMs:   { type: "number", default: 1300 }, // 1-2s avant noir
+        closeMs:      { type: "number", default: 3000 }, // fermeture / fondu noir 3s
+        blackHoldMs:  { type: "number", default: 1000 }, // noir maintenu 1s
         openMs:       { type: "number", default: 2000 }, // ouverture 2s
 
+        // Mouvement vers le banc phase1
         move1Ms: { type: "number", default: 650 },
 
+        // Assis / debout
         standCamY: { type: "number", default: 1.6 },
-        sitCamY:   { type: "number", default: 0.95 },
+        sitCamY:   { type: "number", default: 0.95 }, // assis plus bas
 
+        // Se lever
         standOnAnyInput: { type: "boolean", default: true },
-        standMoveThreshold: { type: "number", default: 0.12 }
+        standMoveThreshold: { type: "number", default: 0.12 } // mouvement VR
       },
 
       init() {
@@ -61,7 +66,7 @@
         };
         window.addEventListener("keydown", this._onKeyDown);
 
-        this.setEyesOpenInstant();
+        this.resetLidsInstant();
       },
 
       remove() {
@@ -70,13 +75,14 @@
         this.el.sceneEl.removeEventListener("tick", this._tickStand);
       },
 
-      // OUVERT = dehors + invisible
-      setEyesOpenInstant() {
+      resetLidsInstant() {
         const { lidTop, lidBot } = this.data;
-        lidTop.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
-        lidBot.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
-        lidTop.setAttribute("position", "0 1.5 -0.55");
-        lidBot.setAttribute("position", "0 -1.5 -0.55");
+        // Position "ouverte" (hors écran)
+        lidTop.setAttribute("position", "0 1.25 -0.55");
+        lidBot.setAttribute("position", "0 -1.25 -0.55");
+        // Opacité à 0 (invisible)
+        lidTop.setAttribute("material", "opacity", 0);
+        lidBot.setAttribute("material", "opacity", 0);
         lidTop.setAttribute("visible", false);
         lidBot.setAttribute("visible", false);
       },
@@ -88,10 +94,9 @@
         if (this._running) return;
         this._running = true;
 
-        // reset état paupières
-        this.setEyesOpenInstant();
+        this.resetLidsInstant();
 
-        // rotation vers le banc
+        // 1) rotation vers le sens du banc
         rig.setAttribute("animation__turn", {
           property: "rotation",
           to: `0 ${d.targetYaw} 0`,
@@ -99,7 +104,7 @@
           easing: "easeOutCubic"
         });
 
-        // approche assise phase1
+        // 2) move vers assise phase1 (mieux sur le banc)
         const p1 = seat1.getAttribute("position");
         rig.setAttribute("animation__approach", {
           property: "position",
@@ -111,104 +116,94 @@
         const t0 = Math.max(d.rotateMs, d.move1Ms) + d.preDelayMs;
 
         setTimeout(() => {
-          // ========= FERMETURE (extérieur -> centre) =========
+          // 3) Fermeture "œil" + fondu noir (opacity monte)
           lidTop.setAttribute("visible", true);
           lidBot.setAttribute("visible", true);
 
-          // Force le point de départ (extérieur) AVANT de lancer l'anim
-          lidTop.setAttribute("position", "0 1.5 -0.55");
-          lidBot.setAttribute("position", "0 -1.5 -0.55");
-          lidTop.setAttribute("material", "opacity", 0);
-          lidBot.setAttribute("material", "opacity", 0);
+          // Assurer que c'est "flat" pour un noir propre en VR
+          lidTop.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
+          lidBot.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
 
-          // Anim fermeture : FROM extérieur -> TO centre
+          // Animation position (paupières qui se ferment)
           lidTop.setAttribute("animation__closePos", {
             property: "position",
-            from: "0 1.5 -0.55",
-            to:   "0 0.55 -0.55",
+            to: "0 0.55 -0.55",
             dur: d.closeMs,
             easing: "easeInOutQuad"
           });
           lidBot.setAttribute("animation__closePos", {
             property: "position",
-            from: "0 -1.5 -0.55",
-            to:   "0 -0.55 -0.55",
+            to: "0 -0.55 -0.55",
             dur: d.closeMs,
             easing: "easeInOutQuad"
           });
 
-          // Fondu noir (opacity) en même temps
+          // Animation opacity (fondu noir smooth)
           lidTop.setAttribute("animation__closeOp", {
             property: "material.opacity",
-            from: 0,
-            to:   1,
+            to: 1,
             dur: d.closeMs,
             easing: "easeInOutQuad"
           });
           lidBot.setAttribute("animation__closeOp", {
             property: "material.opacity",
-            from: 0,
-            to:   1,
+            to: 1,
             dur: d.closeMs,
             easing: "easeInOutQuad"
           });
 
-          // quand c'est fermé + hold -> switch phase2
+          // 4) Après fermeture (3s) + noir maintenu (1s)
           setTimeout(() => {
             setTimeout(() => {
-              // switch
+              // Switch phase + spawn assis phase2
               phase1.setAttribute("visible", false);
               phase2.setAttribute("visible", true);
 
-              // spawn assis phase2
               const p2 = seat2.getAttribute("position");
               rig.setAttribute("position", `${p2.x} ${p2.y} ${p2.z}`);
+
+              // caméra assise (bas)
               cam.setAttribute("position", `0 ${d.sitCamY} 0`);
               this._isSitting = true;
 
+              // init mouvement VR
               cam.object3D.getWorldPosition(this._camWorldPrev);
 
-              // ========= OUVERTURE (centre -> extérieur) =========
-              // Force départ centre (au cas où)
-              lidTop.setAttribute("position", "0 0.55 -0.55");
-              lidBot.setAttribute("position", "0 -0.55 -0.55");
-              lidTop.setAttribute("material", "opacity", 1);
-              lidBot.setAttribute("material", "opacity", 1);
-
+              // 5) Ouverture (2s) — d'abord mouvement, puis on baisse un peu l'opacité vers la fin
               lidTop.setAttribute("animation__openPos", {
                 property: "position",
-                from: "0 0.55 -0.55",
-                to:   "0 1.5 -0.55",
+                to: "0 1.25 -0.55",
                 dur: d.openMs,
                 easing: "easeOutQuad"
               });
               lidBot.setAttribute("animation__openPos", {
                 property: "position",
-                from: "0 -0.55 -0.55",
-                to:   "0 -1.5 -0.55",
+                to: "0 -1.25 -0.55",
                 dur: d.openMs,
                 easing: "easeOutQuad"
               });
 
+              // Opacité qui redescend pendant l'ouverture (smooth)
               lidTop.setAttribute("animation__openOp", {
                 property: "material.opacity",
-                from: 1,
-                to:   0,
+                to: 0,
                 dur: d.openMs,
                 easing: "easeOutQuad"
               });
               lidBot.setAttribute("animation__openOp", {
                 property: "material.opacity",
-                from: 1,
-                to:   0,
+                to: 0,
                 dur: d.openMs,
                 easing: "easeOutQuad"
               });
 
+              // Cleanup
               setTimeout(() => {
                 lidTop.setAttribute("visible", false);
                 lidBot.setAttribute("visible", false);
                 this._running = false;
+
+                // activer lever sur mouvement
                 this.el.sceneEl.addEventListener("tick", this._tickStand);
               }, d.openMs + 80);
 
@@ -228,7 +223,9 @@
         const dist = this._camWorld.distanceTo(this._camWorldPrev);
         this._camWorldPrev.copy(this._camWorld);
 
-        if (dist > d.standMoveThreshold) this.standUp();
+        if (dist > d.standMoveThreshold) {
+          this.standUp();
+        }
       },
 
       standUp() {
@@ -253,10 +250,15 @@
 <body>
   <a-scene>
 
+    <!-- ASSETS -->
     <a-assets>
       <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
       <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg">
       <img id="fabricNormal" src="/EverydayVR/models/textures/Fabric019_1K-JPG_NormalGL.jpg">
+
+      <img id="PaperColor" src="/EverydayVR/models/textures/Paper004_1K-JPG_Color.jpg">
+      <img id="PaperRough" src="/EverydayVR/models/textures/Paper004_1K-JPG_Roughness.jpg">
+      <img id="PaperNormal" src="/EverydayVR/models/textures/Paper004_1K-JPG_NormalGL.jpg">
 
       <img id="SnowColor" src="/EverydayVR/models/textures/Snow010A_1K-JPG_Color.jpg">
       <img id="SnowRough" src="/EverydayVR/models/textures/Snow010A_1K-JPG_Roughness.jpg">
@@ -269,36 +271,42 @@
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
       <a-asset-item id="Porte-manteau" src="/EverydayVR/models/Coat-Rack.glb"></a-asset-item>
 
+      <img id="montagne-bg" src="/images/bg-montagne.png">
       <img id="montagne-2" src="/images/montagne-2.png">
       <img id="bg-left" src="/images/bg-leftside.png">
       <img id="bg-right" src="/images/bg-rightside.png">
       <img id="bg-en-face" src="/images/bg-en-face.png">
     </a-assets>
 
-    <!-- RIG -->
+    <!-- RIG + CAMERA + PAUPIÈRES -->
     <a-entity id="rig" position="0 1.6 4" rotation="0 0 0">
       <a-camera id="cam">
+        <!-- Paupière haut -->
         <a-plane id="lidTop"
-          position="0 1.5 -0.55"
+          position="0 1.25 -0.55"
           width="4" height="2.6"
           visible="false"
           material="shader: flat; color:#000; transparent:true; opacity:0;">
         </a-plane>
 
+        <!-- Paupière bas -->
         <a-plane id="lidBot"
-          position="0 -1.5 -0.55"
+          position="0 -1.25 -0.55"
           width="4" height="2.6"
           visible="false"
           material="shader: flat; color:#000; transparent:true; opacity:0;">
         </a-plane>
       </a-camera>
 
+      <!-- PC ray -->
       <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
     </a-entity>
 
+    <!-- VR ray -->
     <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
     <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
 
+    <!-- Lumières -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
     <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
 
@@ -307,7 +315,9 @@
       <a-sky color="#85754e"></a-sky>
 
       <a-plane
-        height="100" width="100"
+        color="#9C8B61"
+        height="100"
+        width="100"
         rotation="-90 0 0"
         material="
           shader: standard;
@@ -320,7 +330,7 @@
         ">
       </a-plane>
 
-      <!-- Banc phase1 (cliquable) -->
+      <!-- Banc phase1 : cliquable -->
       <a-entity
         id="benchModel"
         class="clickable"
@@ -328,16 +338,24 @@
         position="-1.380 0 -1.500"
         scale="150 150 150"
         bench-sit-transition="
-          rig:#rig; cam:#cam;
-          lidTop:#lidTop; lidBot:#lidBot;
-          phase1:#phase1; phase2:#phase2;
-          seat1:#seatPointPhase1; seat2:#seatPointPhase2;
+          rig:#rig;
+          cam:#cam;
+          lidTop:#lidTop;
+          lidBot:#lidBot;
+          phase1:#phase1;
+          phase2:#phase2;
+          seat1:#seatPointPhase1;
+          seat2:#seatPointPhase2;
           targetYaw:180;
           preDelayMs:1300;
           closeMs:3000;
           blackHoldMs:1000;
           openMs:2000;
+          move1Ms:650;
           sitCamY:0.95;
+          standCamY:1.6;
+          standOnAnyInput:true;
+          standMoveThreshold:0.12;
         ">
       </a-entity>
 
@@ -348,7 +366,8 @@
         scale="2 2 2">
       </a-entity>
 
-      <!-- Assise phase1 (à ajuster si besoin) -->
+      <!-- Assise phase1 : plus bas + plus sur le banc -->
+      <!-- Ajuste surtout Y (0.85-1.05) et Z (plus près du banc) -->
       <a-entity id="seatPointPhase1" position="-1.380 0.90 -1.45"></a-entity>
     </a-entity>
 
@@ -356,7 +375,7 @@
     <a-entity id="phase2" visible="false">
       <a-sky color="#94CEDB"></a-sky>
 
-      <!-- Banc phase2 NON cliquable -->
+      <!-- Banc phase2 : NON cliquable (pas de class clickable) -->
       <a-entity
         id="benchModel_phase2"
         gltf-model="#bancModel"
@@ -364,12 +383,74 @@
         scale="150 150 150">
       </a-entity>
 
-      <a-image src="#montagne-2" position="0 16.450 -51.368" width="100" height="50"></a-image>
-      <a-image src="#bg-en-face" position="0 15.523 47.253" scale="1.04 1.04 1.04" width="100" height="50"></a-image>
-      <a-image src="#bg-left" position="-49.942 16.450 -1.698" rotation="0 90 0" width="100" height="50"></a-image>
-      <a-image src="#bg-right" position="49.942 16.450 -1.698" rotation="0 -90 0" width="100" height="50"></a-image>
+      <a-plane
+        color="#FFFFFE"
+        height="100"
+        width="100"
+        rotation="-90 0 0"
+        material="
+          shader: standard;
+          src: #SnowColor;
+          roughnessMap: #SnowRough;
+          normalMap: #SnowNormal;
+          metalness: 0;
+          repeat: 100 100;
+          normalScale: 1 1;
+        ">
+      </a-plane>
 
-      <!-- Spawn phase2 assis + léger décalage à gauche -->
+      <a-plane
+        color="#FFF4F7"
+        position="0.390 0.15 -1.450"
+        height="3"
+        width="5"
+        rotation="-90 0 0"
+        material="
+          shader: standard;
+          src: #SnowDirtColor;
+          roughnessMap: #SnowDirtRough;
+          normalMap: #SnowDirtNormal;
+          metalness: 0;
+          repeat: 1 1;
+          normalScale: 1 1;
+        ">
+      </a-plane>
+
+      <a-image
+        src="#montagne-2"
+        position="0 16.450 -51.368"
+        rotation="0 0 0"
+        width="100"
+        height="50">
+      </a-image>
+
+      <a-image
+        src="#bg-en-face"
+        position="0 15.523 47.253"
+        rotation="0 0 0"
+        scale="1.04 1.04 1.04"
+        width="100"
+        height="50">
+      </a-image>
+
+      <a-image
+        src="#bg-left"
+        position="-49.942 16.450 -1.698"
+        rotation="0 90 0"
+        width="100"
+        height="50">
+      </a-image>
+
+      <a-image
+        src="#bg-right"
+        position="49.942 16.450 -1.698"
+        rotation="0 -90 0"
+        width="100"
+        height="50">
+      </a-image>
+
+      <!-- Assise phase2 : sur banc + léger décalage à gauche -->
+      <!-- Base banc: -1.380 0.15 -1.500 -> on décale X vers la gauche -->
       <a-entity id="seatPointPhase2" position="-1.520 0.15 -1.500"></a-entity>
     </a-entity>
 
