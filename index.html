@@ -4,86 +4,49 @@
   <meta charset="UTF-8" />
   <title>A-frame everyday</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
   <script>
-    // --- Shader "paupières" : écran noir avec trou ovale qui s'ouvre ---
-    // uOpen: 0 = fermé (noir total), 1 = ouvert (transparent)
-    AFRAME.registerShader("eyelid", {
-      schema: {
-        color: { type: "color", default: "#000" },
-        open:  { type: "number", default: 0.0 } // 0..1
-      },
-      vertexShader: `
-        varying vec2 vUV;
-        void main() {
-          vUV = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 color;
-        uniform float open;
-        varying vec2 vUV;
-
-        void main() {
-          // UV centré -1..1
-          vec2 p = (vUV - 0.5) * 2.0;
-
-          // ovale : x plus large que y (paupières)
-          float a = 1.25; // largeur
-          float b = 0.75; // hauteur
-
-          // distance "ellipse"
-          float d = (p.x*p.x)/(a*a) + (p.y*p.y)/(b*b);
-
-          // taille du trou selon open (0 fermé -> trou minuscule ; 1 ouvert -> grand)
-          float hole = mix(0.02, 3.0, open); // 3.0 => largement au-delà de l'écran
-
-          // bord doux de l'ouverture
-          float edge = smoothstep(hole, hole - 0.25, d);
-
-          // edge = 1 => noir, edge = 0 => transparent
-          float alpha = edge;
-
-          gl_FragColor = vec4(color, alpha);
-        }
-      `
-    });
-
-    AFRAME.registerComponent("bench-sit-switch-pro", {
+    /**
+     * Interaction simple & sûre :
+     * - PC + VR : click sur le banc (ray mouse / laser)
+     * - rotation vers le sens du banc
+     * - petit délai
+     * - fermeture paupières (3s) + hold noir (1s)
+     * - switch phase1 -> phase2
+     * - spawn assis sur banc phase2 (rig à -1.380 0.15 -1.500 + caméra basse)
+     * - ouverture paupières (2s)
+     * - si tu bouges (WASD / joystick VR), tu te lèves (cam remonte)
+     */
+    AFRAME.registerComponent("bench-sit-switch-simple", {
       schema: {
         rig:   { type: "selector" },
         cam:   { type: "selector" },
 
-        // eyelid plane (shader)
-        eyelid: { type: "selector" },
+        lidTop: { type: "selector" },
+        lidBot: { type: "selector" },
 
         phase1:{ type: "selector" },
         phase2:{ type: "selector" },
 
-        // points
         seat1: { type: "selector" },
         seat2: { type: "selector" },
 
-        // orientation
         targetYaw: { type: "number", default: 180 },
         rotateMs:  { type: "number", default: 700 },
 
-        // timings
-        preDelayMs: { type: "number", default: 1200 }, // 1-2s
-        fadeToBlackMs: { type: "number", default: 3000 }, // fondu vers noir (3s)
-        blackHoldMs:   { type: "number", default: 800 },  // noir reste un peu
-        eyeOpenMs:     { type: "number", default: 2000 }, // ouverture (2s)
+        preDelayMs: { type: "number", default: 1300 },
 
-        // movement
+        closeMs:     { type: "number", default: 3000 }, // fondu noir (fermeture)
+        blackHoldMs: { type: "number", default: 1000 }, // noir maintenu
+        openMs:      { type: "number", default: 2000 }, // ouverture
+
         move1Ms: { type: "number", default: 650 },
 
-        // sit / stand
         standCamY: { type: "number", default: 1.6 },
         sitCamY:   { type: "number", default: 1.05 },
 
-        // détection lever
         standOnAnyInput: { type: "boolean", default: true },
         standMoveThreshold: { type: "number", default: 0.12 }
       },
@@ -92,44 +55,50 @@
         this._running = false;
         this._isSitting = false;
 
-        this._sitWorldPos = new THREE.Vector3();
-        this._camWorldPos = new THREE.Vector3();
-        this._camWorldPosPrev = new THREE.Vector3();
+        this._camWorld = new THREE.Vector3();
+        this._camWorldPrev = new THREE.Vector3();
 
         this.onClick = () => this.run();
         this.el.addEventListener("click", this.onClick);
 
-        this._onInput = (e) => {
+        this._tickStand = this._tickStand.bind(this);
+
+        this._onKeyDown = (e) => {
           if (!this._isSitting) return;
           if (!this.data.standOnAnyInput) return;
-
-          // touches classiques
-          const k = e.key ? e.key.toLowerCase() : "";
+          const k = (e.key || "").toLowerCase();
           if (["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) {
             this.standUp();
           }
         };
-        window.addEventListener("keydown", this._onInput);
+        window.addEventListener("keydown", this._onKeyDown);
       },
 
       remove() {
         this.el.removeEventListener("click", this.onClick);
-        window.removeEventListener("keydown", this._onInput);
+        window.removeEventListener("keydown", this._onKeyDown);
         this.el.sceneEl.removeEventListener("tick", this._tickStand);
+      },
+
+      setLidsOpenInstant() {
+        const { lidTop, lidBot } = this.data;
+        lidTop.setAttribute("position", "0 1.2 -0.55");
+        lidBot.setAttribute("position", "0 -1.2 -0.55");
+        lidTop.setAttribute("visible", false);
+        lidBot.setAttribute("visible", false);
       },
 
       run() {
         const d = this.data;
-        const { rig, cam, eyelid, phase1, phase2, seat1, seat2 } = d;
-        if (!rig || !cam || !eyelid || !phase1 || !phase2 || !seat1 || !seat2) return;
+        const { rig, cam, lidTop, lidBot, phase1, phase2, seat1, seat2 } = d;
+        if (!rig || !cam || !lidTop || !lidBot || !phase1 || !phase2 || !seat1 || !seat2) return;
         if (this._running) return;
         this._running = true;
 
-        // reset eyelid (ouvert = 1) puis on ferme vers 0
-        eyelid.setAttribute("visible", true);
-        eyelid.setAttribute("material", "shader: eyelid; color: #000; open: 1");
+        // sécurité
+        this.setLidsOpenInstant();
 
-        // 1) tourner dans le sens du banc
+        // 1) rotation vers le banc
         rig.setAttribute("animation__turn", {
           property: "rotation",
           to: `0 ${d.targetYaw} 0`,
@@ -137,7 +106,7 @@
           easing: "easeOutCubic"
         });
 
-        // 2) petit move vers seat1
+        // 2) petit move vers seat1 (approche)
         const p1 = seat1.getAttribute("position");
         rig.setAttribute("animation__approach", {
           property: "position",
@@ -146,78 +115,86 @@
           easing: "easeOutCubic"
         });
 
-        // 3) délai avant noir
         const t0 = Math.max(d.rotateMs, d.move1Ms) + d.preDelayMs;
 
         setTimeout(() => {
-          // 4) Fondu vers noir : open 1 -> 0
-          eyelid.setAttribute("animation__close", {
-            property: "material.open",
-            from: 1,
-            to: 0,
-            dur: d.fadeToBlackMs,
+          // 3) fermer paupières
+          lidTop.setAttribute("visible", true);
+          lidBot.setAttribute("visible", true);
+
+          lidTop.setAttribute("animation__closeTop", {
+            property: "position",
+            to: "0 0.55 -0.55",
+            dur: d.closeMs,
             easing: "easeInOutQuad"
           });
 
-          // 5) une fois noir + hold, switch et spawn
+          lidBot.setAttribute("animation__closeBot", {
+            property: "position",
+            to: "0 -0.55 -0.55",
+            dur: d.closeMs,
+            easing: "easeInOutQuad"
+          });
+
+          // 4) après fermeture + hold, switch & spawn
           setTimeout(() => {
-            // noir est là
             setTimeout(() => {
-              // switch
+              // switch phases
               phase1.setAttribute("visible", false);
               phase2.setAttribute("visible", true);
 
               // spawn EXACT banc phase2
-              const p2 = seat2.getAttribute("position"); // -> -1.380 0.15 -1.500
+              const p2 = seat2.getAttribute("position"); // -1.380 0.15 -1.500
               rig.setAttribute("position", `${p2.x} ${p2.y} ${p2.z}`);
 
               // assis
               cam.setAttribute("position", `0 ${d.sitCamY} 0`);
               this._isSitting = true;
 
-              // init positions monde pour lever
-              cam.object3D.getWorldPosition(this._camWorldPosPrev);
+              // init monde pour détecter mouvement VR
+              cam.object3D.getWorldPosition(this._camWorldPrev);
 
-              // 6) ouverture "œil" : open 0 -> 1 (2s)
-              eyelid.setAttribute("animation__open", {
-                property: "material.open",
-                from: 0,
-                to: 1,
-                dur: d.eyeOpenMs,
+              // 5) ouverture paupières
+              lidTop.setAttribute("animation__openTop", {
+                property: "position",
+                to: "0 1.2 -0.55",
+                dur: d.openMs,
                 easing: "easeOutQuad"
               });
 
-              // cacher l'eyelid après ouverture + un tout petit buffer
+              lidBot.setAttribute("animation__openBot", {
+                property: "position",
+                to: "0 -1.2 -0.55",
+                dur: d.openMs,
+                easing: "easeOutQuad"
+              });
+
+              // cacher après ouverture
               setTimeout(() => {
-                eyelid.setAttribute("visible", false);
+                lidTop.setAttribute("visible", false);
+                lidBot.setAttribute("visible", false);
                 this._running = false;
 
-                // activer stand check par mouvement réel (cam monde)
-                this._tickStand = this._tickStand || this.tickStand.bind(this);
+                // activer stand check par mouvement réel
                 this.el.sceneEl.addEventListener("tick", this._tickStand);
-              }, d.eyeOpenMs + 80);
+              }, d.openMs + 80);
 
             }, d.blackHoldMs);
 
-          }, d.fadeToBlackMs + 20);
+          }, d.closeMs + 30);
 
         }, t0);
       },
 
-      tickStand() {
+      _tickStand() {
         if (!this._isSitting) return;
-
         const d = this.data;
         const cam = d.cam;
         if (!cam) return;
 
-        cam.object3D.getWorldPosition(this._camWorldPos);
-
-        // si la caméra a bougé dans le monde (joystick VR, WASD, etc.) => se lever
-        const dist = this._camWorldPos.distanceTo(this._camWorldPosPrev);
-
-        // mettre à jour prev pour la frame suivante
-        this._camWorldPosPrev.copy(this._camWorldPos);
+        cam.object3D.getWorldPosition(this._camWorld);
+        const dist = this._camWorld.distanceTo(this._camWorldPrev);
+        this._camWorldPrev.copy(this._camWorld);
 
         if (dist > d.standMoveThreshold) {
           this.standUp();
@@ -228,7 +205,6 @@
         if (!this._isSitting) return;
         const d = this.data;
         const cam = d.cam;
-        if (!cam) return;
 
         cam.setAttribute("animation__stand", {
           property: "position",
@@ -238,7 +214,6 @@
         });
 
         this._isSitting = false;
-        // stop tick
         this.el.sceneEl.removeEventListener("tick", this._tickStand);
       }
     });
@@ -248,6 +223,7 @@
 <body>
   <a-scene>
 
+    <!-- ASSETS -->
     <a-assets>
       <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
       <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg">
@@ -268,40 +244,49 @@
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
       <a-asset-item id="Porte-manteau" src="/EverydayVR/models/Coat-Rack.glb"></a-asset-item>
 
+      <img id="montagne-bg" src="/images/bg-montagne.png">
       <img id="montagne-2" src="/images/montagne-2.png">
       <img id="bg-left" src="/images/bg-leftside.png">
       <img id="bg-right" src="/images/bg-rightside.png">
       <img id="bg-en-face" src="/images/bg-en-face.png">
     </a-assets>
 
-    <!-- RIG -->
+    <!-- RIG + CAMERA + PAUPIÈRES (dans la caméra, donc toujours visible) -->
     <a-entity id="rig" position="0 1.6 4" rotation="0 0 0">
-      <a-camera id="cam"></a-camera>
+      <a-camera id="cam">
+        <!-- Paupière haut -->
+        <a-plane id="lidTop"
+          position="0 1.2 -0.55"
+          width="4" height="2.4"
+          visible="false"
+          material="color:#000; transparent:false;">
+        </a-plane>
 
-      <!-- PC -->
+        <!-- Paupière bas -->
+        <a-plane id="lidBot"
+          position="0 -1.2 -0.55"
+          width="4" height="2.4"
+          visible="false"
+          material="color:#000; transparent:false;">
+        </a-plane>
+      </a-camera>
+
+      <!-- PC ray -->
       <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
     </a-entity>
 
-    <!-- VR -->
+    <!-- VR ray -->
     <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
     <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
 
-    <!-- Eyelid overlay (devant caméra) -->
-    <a-plane
-      id="eyelid"
-      position="0 1.6 3.4"
-      width="4" height="4"
-      visible="false"
-      material="shader: eyelid; color:#000; open:1"
-      render-order="999">
-    </a-plane>
-
-    <!-- Lights -->
+    <!-- Lumières -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
     <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
 
     <!-- ========= PHASE 1 ========= -->
     <a-entity id="phase1" visible="true">
+
+      <!-- IMPORTANT: plus de sky bleu ici -->
       <a-sky color="#85754e"></a-sky>
 
       <a-plane
@@ -320,16 +305,18 @@
         ">
       </a-plane>
 
+      <!-- Banc (clic) -->
       <a-entity
         id="benchModel"
         class="clickable"
         gltf-model="#bancModel"
         position="-1.380 0 -1.500"
         scale="150 150 150"
-        bench-sit-switch-pro="
+        bench-sit-switch-simple="
           rig:#rig;
           cam:#cam;
-          eyelid:#eyelid;
+          lidTop:#lidTop;
+          lidBot:#lidBot;
           phase1:#phase1;
           phase2:#phase2;
           seat1:#seatPointPhase1;
@@ -337,13 +324,12 @@
           targetYaw:180;
           rotateMs:700;
           preDelayMs:1300;
-          fadeToBlackMs:3000;
-          blackHoldMs:900;
-          eyeOpenMs:2000;
+          closeMs:3000;
+          blackHoldMs:1000;
+          openMs:2000;
           move1Ms:650;
           sitCamY:1.05;
           standCamY:1.6;
-          standOnAnyInput:true;
           standMoveThreshold:0.12;
         ">
       </a-entity>
@@ -355,7 +341,9 @@
         scale="2 2 2">
       </a-entity>
 
+      <!-- Point d'approche / align phase1 (tu peux ajuster) -->
       <a-entity id="seatPointPhase1" position="-1.380 1.15 -1.25"></a-entity>
+
     </a-entity>
 
     <!-- ========= PHASE 2 ========= -->
@@ -406,6 +394,7 @@
         src="#montagne-2"
         position="0 16.450 -51.368"
         rotation="0 0 0"
+        scale="1 1 1"
         width="100"
         height="50">
       </a-image>
@@ -423,6 +412,7 @@
         src="#bg-left"
         position="-49.942 16.450 -1.698"
         rotation="0 90 0"
+        scale="1 1 1"
         width="100"
         height="50">
       </a-image>
@@ -431,12 +421,14 @@
         src="#bg-right"
         position="49.942 16.450 -1.698"
         rotation="0 -90 0"
+        scale="1 1 1"
         width="100"
         height="50">
       </a-image>
 
-      <!-- Spawn EXACT banc phase2 -->
+      <!-- Spawn EXACT banc phase2 (tu l'as demandé) -->
       <a-entity id="seatPointPhase2" position="-1.380 0.15 -1.500"></a-entity>
+
     </a-entity>
 
   </a-scene>
