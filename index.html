@@ -92,7 +92,7 @@
         // Fog = forcément global => sur la scene
         // Couleur = même que le sky phase 2 pour éviter la "ligne" à l'horizon
         const scene = this.el.sceneEl;
-        scene.setAttribute("fog", "type: linear; color: #94CEDB; near: 6; far: 32");
+        scene.setAttribute("fog", "type: linear; color: #000; near: 6; far: 32");
       },
 
       clearFog() {
@@ -261,8 +261,6 @@
         this._isSitting = false;
         this.el.sceneEl.removeEventListener("tick", this._tickStand);
 
-        // === FOG OFF quand tu te lèves (AJOUT) ===
-        this.clearFog();
         // =======================================
       }
     });
@@ -302,8 +300,8 @@
     </a-assets>
 
     <!-- RIG + CAMERA + PAUPIÈRES -->
-    <a-entity id="rig" position="0 1.2 4" rotation="0 0 0" movement-controls=" speed: 0.15 ; constrainToNavMesh: true;">
-      <a-camera id="cam" speed="0.3" look-controls="pointerLockEnabled: true">
+    <a-entity id="rig" position="0 1.2 4" rotation="0 0 0" >
+      <a-camera id="cam" speed="0.3">
 
         <!-- Paupière haut -->
         <a-plane id="lidTop"
