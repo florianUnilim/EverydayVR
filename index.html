@@ -7,66 +7,160 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
   <script>
-    // Click banc -> s'asseoir (move rig) + fade + switch phase1->phase2
-    AFRAME.registerComponent("bench-sit-switch", {
+    // Helpers
+    function yawToDegrees(yawRad) { return yawRad * (180 / Math.PI); }
+    function degreesToYaw(deg) { return deg * (Math.PI / 180); }
+
+    // Click banc -> orient rig -> delay -> fade hold -> switch -> spawn assis -> stand on move
+    AFRAME.registerComponent("bench-sit-switch-pro", {
       schema: {
         rig:   { type: "selector" },
-        seat:  { type: "selector" },
+        cam:   { type: "selector" },        // la camera dans le rig
         fade:  { type: "selector" },
         phase1:{ type: "selector" },
         phase2:{ type: "selector" },
-        moveMs:{ type: "number", default: 900 },
-        fadeMs:{ type: "number", default: 450 },
-        offsetAfterMoveMs: { type: "number", default: 150 }
+
+        seat1: { type: "selector" },        // point d'assise phase1 (debout -> align)
+        seat2: { type: "selector" },        // point d'assise phase2 (assis)
+
+        // Orientation (yaw) à atteindre avant la transition
+        targetYaw: { type: "number", default: 180 }, // degrés (ajuste si banc inverse)
+        rotateMs:  { type: "number", default: 700 },
+
+        // Délais
+        preDelayMs:   { type: "number", default: 1200 }, // 1-2s avant fade
+        fadeInMs:     { type: "number", default: 550 },  // fade in
+        fadeHoldMs:   { type: "number", default: 1200 }, // noir reste 1-2s
+        fadeOutMs:    { type: "number", default: 550 },  // fade out
+
+        // Mouvement rig
+        move1Ms: { type: "number", default: 650 }, // aller vers seat1 (léger)
+        move2Ms: { type: "number", default: 0   }, // spawn direct seat2 (assis)
+
+        // Assis/debout
+        standCamY: { type: "number", default: 1.6 },  // hauteur normale caméra
+        sitCamY:   { type: "number", default: 1.05 }, // hauteur assise caméra (ajuste)
+        standThreshold: { type: "number", default: 0.35 }, // distance à partir de laquelle on considère "je me lève"
       },
 
       init() {
+        this._running = false;
+        this._isSitting = false;
+        this._sitPos = null;
+
         this.onClick = () => this.run();
         this.el.addEventListener("click", this.onClick);
+
+        this._checkStand = this._checkStand.bind(this);
       },
 
       remove() {
         this.el.removeEventListener("click", this.onClick);
+        this.el.sceneEl.removeEventListener("tick", this._checkStand);
       },
 
       run() {
-        const { rig, seat, fade, phase1, phase2, moveMs, fadeMs, offsetAfterMoveMs } = this.data;
-        if (!rig || !seat || !fade || !phase1 || !phase2) return;
-
-        // éviter double clic
+        const d = this.data;
+        const { rig, cam, fade, phase1, phase2, seat1, seat2 } = d;
+        if (!rig || !cam || !fade || !phase1 || !phase2 || !seat1 || !seat2) return;
         if (this._running) return;
         this._running = true;
 
-        // 1) fade in
-        fade.setAttribute("visible", true);
-        fade.emit("fadein");
-
-        // 2) déplacer le rig vers le point d'assise
-        const p = seat.getAttribute("position");
-        rig.setAttribute("animation__sit", {
-          property: "position",
-          to: `${p.x} ${p.y} ${p.z}`,
-          dur: moveMs,
+        // 0) lock double click
+        // 1) rotation du rig pour être dans le sens du banc (yaw)
+        rig.setAttribute("animation__turn", {
+          property: "rotation",
+          to: `0 ${d.targetYaw} 0`,
+          dur: d.rotateMs,
           easing: "easeOutCubic"
         });
 
-        // 3) switch de phase après mouvement + petit délai
-        const switchDelay = Math.max(moveMs, fadeMs) + offsetAfterMoveMs;
+        // 2) petit move vers seat1 (optionnel mais agréable)
+        const p1 = seat1.getAttribute("position");
+        rig.setAttribute("animation__approach", {
+          property: "position",
+          to: `${p1.x} ${p1.y} ${p1.z}`,
+          dur: d.move1Ms,
+          easing: "easeOutCubic"
+        });
+
+        // 3) après rotation + move, attendre preDelay, puis fade in
+        const tAfterMove = Math.max(d.rotateMs, d.move1Ms) + d.preDelayMs;
 
         setTimeout(() => {
-          phase1.setAttribute("visible", false);
-          phase2.setAttribute("visible", true);
+          // fade in
+          fade.setAttribute("visible", true);
 
-          // 4) fade out
-          fade.emit("fadeout");
+          // On met à jour les anims du fade avec tes durées (au cas où)
+          fade.setAttribute("animation__fadein",
+            `property: material.opacity; to: 1; dur: ${d.fadeInMs}; easing: easeOutQuad; startEvents: fadein`);
+          fade.setAttribute("animation__fadeout",
+            `property: material.opacity; to: 0; dur: ${d.fadeOutMs}; easing: easeOutQuad; startEvents: fadeout`);
 
-          // 5) cacher le plane après fadeout (propre)
+          fade.emit("fadein");
+
+          // 4) quand le noir est bien là (fadeIn), on hold, puis switch
           setTimeout(() => {
-            fade.setAttribute("visible", false);
-            this._running = false;
-          }, fadeMs + 50);
+            // switch phase
+            phase1.setAttribute("visible", false);
+            phase2.setAttribute("visible", true);
 
-        }, switchDelay);
+            // 5) spawn assis sur seat2 : position rig + hauteur caméra assise
+            const p2 = seat2.getAttribute("position");
+            rig.setAttribute("position", `${p2.x} ${p2.y} ${p2.z}`);
+
+            // hauteur caméra assise
+            cam.setAttribute("position", `0 ${d.sitCamY} 0`);
+
+            // mémoriser la position "assis" pour détecter quand il avance
+            this._isSitting = true;
+            this._sitPos = new THREE.Vector3(p2.x, p2.y, p2.z);
+
+            // 6) hold encore un peu, puis fade out
+            setTimeout(() => {
+              fade.emit("fadeout");
+
+              // à la fin du fadeout, cacher le plane
+              setTimeout(() => {
+                fade.setAttribute("visible", false);
+                this._running = false;
+
+                // activer le check "se lever quand on avance"
+                this.el.sceneEl.addEventListener("tick", this._checkStand);
+              }, d.fadeOutMs + 50);
+
+            }, d.fadeHoldMs);
+
+          }, d.fadeInMs + 30);
+
+        }, tAfterMove);
+      },
+
+      _checkStand() {
+        if (!this._isSitting || !this._sitPos) return;
+        const d = this.data;
+        const rig = d.rig;
+        const cam = d.cam;
+        if (!rig || !cam) return;
+
+        const rigPos = rig.getAttribute("position");
+        const current = new THREE.Vector3(rigPos.x, rigPos.y, rigPos.z);
+
+        // Si le rig s'est déplacé (WASD / joystick VR), on se lève
+        if (current.distanceTo(this._sitPos) > d.standThreshold) {
+          cam.setAttribute("animation__stand", {
+            property: "position",
+            to: `0 ${d.standCamY} 0`,
+            dur: 350,
+            easing: "easeOutCubic"
+          });
+
+          this._isSitting = false;
+          this._sitPos = null;
+
+          // on peut arrêter d'écouter le tick
+          this.el.sceneEl.removeEventListener("tick", this._checkStand);
+        }
       }
     });
   </script>
@@ -75,7 +169,6 @@
 <body>
   <a-scene>
 
-    <!-- ASSETS -->
     <a-assets>
       <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
       <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg">
@@ -103,36 +196,34 @@
       <img id="bg-en-face" src="/images/bg-en-face.png">
     </a-assets>
 
-    <!-- RIG caméra -->
-    <a-entity id="rig" position="0 1.6 4">
-      <a-camera>
-        <!-- FADE (attaché à la caméra) -->
+    <!-- RIG -->
+    <a-entity id="rig" position="0 1.6 4" rotation="0 0 0">
+      <a-camera id="cam">
         <a-plane
           id="fade"
           position="0 0 -0.6"
           width="4" height="4"
           visible="false"
           material="color:#000; transparent:true; opacity:0"
-          animation__fadein="property: material.opacity; to: 1; dur: 450; easing: easeOutQuad; startEvents: fadein"
-          animation__fadeout="property: material.opacity; to: 0; dur: 450; easing: easeOutQuad; startEvents: fadeout"
+          animation__fadein="property: material.opacity; to: 1; dur: 550; easing: easeOutQuad; startEvents: fadein"
+          animation__fadeout="property: material.opacity; to: 0; dur: 550; easing: easeOutQuad; startEvents: fadeout"
         ></a-plane>
       </a-camera>
 
-      <!-- PC: ray mouse -->
+      <!-- PC -->
       <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
     </a-entity>
 
-    <!-- VR: controllers -->
+    <!-- VR -->
     <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
     <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
 
-    <!-- Lumières -->
+    <!-- Lights -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
     <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
 
     <!-- ========= PHASE 1 ========= -->
     <a-entity id="phase1" visible="true">
-
       <a-sky color="#85754e"></a-sky>
 
       <a-plane
@@ -151,14 +242,32 @@
         ">
       </a-plane>
 
-      <!-- Banc (inchangé) + clickable + component -->
+      <!-- Banc (phase1) -->
       <a-entity
         id="benchModel"
         class="clickable"
         gltf-model="#bancModel"
         position="-1.380 0 -1.500"
         scale="150 150 150"
-        bench-sit-switch="rig:#rig; seat:#seatPoint; fade:#fade; phase1:#phase1; phase2:#phase2; moveMs:900; fadeMs:450">
+        bench-sit-switch-pro="
+          rig:#rig;
+          cam:#cam;
+          fade:#fade;
+          phase1:#phase1;
+          phase2:#phase2;
+          seat1:#seatPointPhase1;
+          seat2:#seatPointPhase2;
+          targetYaw:180;
+          rotateMs:700;
+          preDelayMs:1300;
+          fadeInMs:550;
+          fadeHoldMs:1300;
+          fadeOutMs:550;
+          move1Ms:650;
+          sitCamY:1.05;
+          standCamY:1.6;
+          standThreshold:0.35;
+        ">
       </a-entity>
 
       <a-entity
@@ -168,15 +277,17 @@
         scale="2 2 2">
       </a-entity>
 
-      <!-- Point d'assise (tu peux ajuster Y/Z si tu veux plus “assis”) -->
-      <a-entity id="seatPoint" position="-1.380 1.15 -1.25"></a-entity>
+      <!-- Point "approche" / align en phase1 (tu peux ajuster si besoin) -->
+      <a-entity id="seatPointPhase1" position="-1.380 1.15 -1.25"></a-entity>
 
+      <a-sky color="#94CEDB"></a-sky>
     </a-entity>
 
     <!-- ========= PHASE 2 ========= -->
     <a-entity id="phase2" visible="false">
       <a-sky color="#94CEDB"></a-sky>
 
+      <!-- Banc (phase2) inchangé -->
       <a-entity
         id="benchModel_phase2"
         gltf-model="#bancModel"
@@ -252,6 +363,10 @@
         width="100"
         height="50">
       </a-image>
+
+      <!-- Point assis phase2 (au banc) : tu voulais spawn sur le banc phase2 -->
+      <!-- NOTE: on met Y "assis" via camera, donc ici tu gardes le Y du rig logique -->
+      <a-entity id="seatPointPhase2" position="-1.380 0.15 -1.500"></a-entity>
 
     </a-entity>
 
