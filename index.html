@@ -279,7 +279,20 @@
     </a-assets>
 
     <!-- RIG + CAMERA + PAUPIÈRES -->
-    <a-entity id="rig" position="0 1.2 4" rotation="0 0 0" >
+    <a-entity
+  id="rig"
+  position="0 1.2 4"
+  rotation="0 0 0"
+  movement-controls="
+    speed: 0.15;
+    fly: false;
+  "
+>
+
+
+<a-entity hand-controls="left"></a-entity>
+<a-entity hand-controls="right"></a-entity>
+
       <a-camera id="cam" speed="0.3">
 
         <!-- Paupière haut -->
