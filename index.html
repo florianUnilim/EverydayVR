@@ -5,12 +5,77 @@
   <title>A-frame everyday</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+  <script>
+    // Click banc -> s'asseoir (move rig) + fade + switch phase1->phase2
+    AFRAME.registerComponent("bench-sit-switch", {
+      schema: {
+        rig:   { type: "selector" },
+        seat:  { type: "selector" },
+        fade:  { type: "selector" },
+        phase1:{ type: "selector" },
+        phase2:{ type: "selector" },
+        moveMs:{ type: "number", default: 900 },
+        fadeMs:{ type: "number", default: 450 },
+        offsetAfterMoveMs: { type: "number", default: 150 }
+      },
+
+      init() {
+        this.onClick = () => this.run();
+        this.el.addEventListener("click", this.onClick);
+      },
+
+      remove() {
+        this.el.removeEventListener("click", this.onClick);
+      },
+
+      run() {
+        const { rig, seat, fade, phase1, phase2, moveMs, fadeMs, offsetAfterMoveMs } = this.data;
+        if (!rig || !seat || !fade || !phase1 || !phase2) return;
+
+        // éviter double clic
+        if (this._running) return;
+        this._running = true;
+
+        // 1) fade in
+        fade.setAttribute("visible", true);
+        fade.emit("fadein");
+
+        // 2) déplacer le rig vers le point d'assise
+        const p = seat.getAttribute("position");
+        rig.setAttribute("animation__sit", {
+          property: "position",
+          to: `${p.x} ${p.y} ${p.z}`,
+          dur: moveMs,
+          easing: "easeOutCubic"
+        });
+
+        // 3) switch de phase après mouvement + petit délai
+        const switchDelay = Math.max(moveMs, fadeMs) + offsetAfterMoveMs;
+
+        setTimeout(() => {
+          phase1.setAttribute("visible", false);
+          phase2.setAttribute("visible", true);
+
+          // 4) fade out
+          fade.emit("fadeout");
+
+          // 5) cacher le plane après fadeout (propre)
+          setTimeout(() => {
+            fade.setAttribute("visible", false);
+            this._running = false;
+          }, fadeMs + 50);
+
+        }, switchDelay);
+      }
+    });
+  </script>
 </head>
 
 <body>
   <a-scene>
 
-    <!-- ASSETS (une seule fois) -->
+    <!-- ASSETS -->
     <a-assets>
       <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
       <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg">
@@ -38,16 +103,34 @@
       <img id="bg-en-face" src="/images/bg-en-face.png">
     </a-assets>
 
-    <!-- RIG caméra (sans fade / sans cursor / sans interactions) -->
+    <!-- RIG caméra -->
     <a-entity id="rig" position="0 1.6 4">
-      <a-camera></a-camera>
+      <a-camera>
+        <!-- FADE (attaché à la caméra) -->
+        <a-plane
+          id="fade"
+          position="0 0 -0.6"
+          width="4" height="4"
+          visible="false"
+          material="color:#000; transparent:true; opacity:0"
+          animation__fadein="property: material.opacity; to: 1; dur: 450; easing: easeOutQuad; startEvents: fadein"
+          animation__fadeout="property: material.opacity; to: 0; dur: 450; easing: easeOutQuad; startEvents: fadeout"
+        ></a-plane>
+      </a-camera>
+
+      <!-- PC: ray mouse -->
+      <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
     </a-entity>
 
-    <!-- Lumières (toujours présentes) -->
+    <!-- VR: controllers -->
+    <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
+    <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
+
+    <!-- Lumières -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
     <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
 
-    <!-- ========= PHASE 1 (inchangée niveau objets) ========= -->
+    <!-- ========= PHASE 1 ========= -->
     <a-entity id="phase1" visible="true">
 
       <a-sky color="#85754e"></a-sky>
@@ -68,11 +151,14 @@
         ">
       </a-plane>
 
+      <!-- Banc (inchangé) + clickable + component -->
       <a-entity
         id="benchModel"
+        class="clickable"
         gltf-model="#bancModel"
         position="-1.380 0 -1.500"
-        scale="150 150 150">
+        scale="150 150 150"
+        bench-sit-switch="rig:#rig; seat:#seatPoint; fade:#fade; phase1:#phase1; phase2:#phase2; moveMs:900; fadeMs:450">
       </a-entity>
 
       <a-entity
@@ -82,16 +168,17 @@
         scale="2 2 2">
       </a-entity>
 
+      <!-- Point d'assise (tu peux ajuster Y/Z si tu veux plus “assis”) -->
+      <a-entity id="seatPoint" position="-1.380 1.15 -1.25"></a-entity>
 
     </a-entity>
 
-    <!-- ========= PHASE 2 (inchangée niveau objets) ========= -->
+    <!-- ========= PHASE 2 ========= -->
     <a-entity id="phase2" visible="false">
-
       <a-sky color="#94CEDB"></a-sky>
 
       <a-entity
-        id="benchModel"
+        id="benchModel_phase2"
         gltf-model="#bancModel"
         position="-1.380 0.15 -1.500"
         scale="150 150 150">
@@ -142,7 +229,7 @@
       <a-image
         src="#bg-en-face"
         position="0 15.523 47.253"
-        rotation="0 180 0"
+        rotation="0 0 0"
         scale="1.04 1.04 1.04"
         width="100"
         height="50">
