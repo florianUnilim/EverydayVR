@@ -87,6 +87,20 @@
         lidBot.setAttribute("visible", false);
       },
 
+      // === FOG PHASE 2 (AJOUT) ===
+      applyPhase2Fog() {
+        // Fog = forcément global => sur la scene
+        // Couleur = même que le sky phase 2 pour éviter la "ligne" à l'horizon
+        const scene = this.el.sceneEl;
+        scene.setAttribute("fog", "type: linear; color: #94CEDB; near: 6; far: 32");
+      },
+
+      clearFog() {
+        const scene = this.el.sceneEl;
+        scene.removeAttribute("fog");
+      },
+      // ===========================
+
       run() {
         const d = this.data;
         const { rig, cam, lidTop, lidBot, phase1, phase2, seat1, seat2 } = d;
@@ -159,6 +173,10 @@
               phase1.setAttribute("visible", false);
               phase2.setAttribute("visible", true);
 
+              // === FOG ON UNIQUEMENT EN PHASE 2 (AJOUT) ===
+              this.applyPhase2Fog();
+              // ============================================
+
               const p2 = seat2.getAttribute("position");
               rig.setAttribute("position", `${p2.x} ${p2.y} ${p2.z}`);
 
@@ -169,7 +187,7 @@
               // init mouvement VR
               cam.object3D.getWorldPosition(this._camWorldPrev);
 
-              // 5) Ouverture (2s) — d'abord mouvement, puis on baisse un peu l'opacité vers la fin
+              // 5) Ouverture (2s)
               lidTop.setAttribute("animation__openPos", {
                 property: "position",
                 to: "0 1.25 -0.55",
@@ -242,13 +260,18 @@
 
         this._isSitting = false;
         this.el.sceneEl.removeEventListener("tick", this._tickStand);
+
+        // === FOG OFF quand tu te lèves (AJOUT) ===
+        this.clearFog();
+        // =======================================
       }
     });
   </script>
 </head>
 
 <body>
-  <a-scene>
+  <!-- AJOUT: id="scene" pour pouvoir piloter facilement si besoin -->
+  <a-scene id="scene">
 
     <!-- ASSETS -->
     <a-assets>
@@ -368,7 +391,6 @@
       </a-entity>
 
       <!-- Assise phase1 : plus bas + plus sur le banc -->
-      <!-- Ajuste surtout Y (0.85-1.05) et Z (plus près du banc) -->
       <a-entity id="seatPointPhase1" position="-1.380 0.90 -1.500"></a-entity>
     </a-entity>
 
@@ -376,7 +398,7 @@
     <a-entity id="phase2" visible="false">
       <a-sky color="#94CEDB"></a-sky>
 
-      <!-- Banc phase2 : NON cliquable (pas de class clickable) -->
+      <!-- Banc phase2 : NON cliquable -->
       <a-entity
         id="benchModel_phase2"
         gltf-model="#bancModel"
