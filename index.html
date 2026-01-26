@@ -132,8 +132,7 @@
       <img id="bg-en-face" src="/images/bg-en-face.png">
 
 
-      <!-- Mets un vrai fichier audio sinon ça sert à rien -->
-      <!-- <audio id="seatSfx" src="/EverydayVR/sounds/seat.mp3"></audio> -->
+      
     </a-assets>
 
     <!-- RIG caméra (toujours visible) -->
@@ -164,7 +163,7 @@
     <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
 
     <!-- ========= PHASE 1 ========= -->
-    <a-entity id="phase1" visible="false">
+    <a-entity id="phase1" visible="true">
 
       <!-- Son (optionnel : active seulement si tu mets un vrai audio dans assets) -->
       <!-- <a-entity id="seatSound" sound="src:#seatSfx; autoplay:false; volume:1"></a-entity> -->
@@ -224,7 +223,7 @@
     </a-entity>
 
     <!-- ========= PHASE 2 ========= -->
-    <a-entity id="phase2" visible="true">
+    <a-entity id="phase2" visible="false">
       <!-- Mets ici ton décor 2 (sol, sky, objets, sons...) -->
       <a-sky color="#94CEDB"></a-sky>
 
