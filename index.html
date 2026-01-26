@@ -4,102 +4,7 @@
   <meta charset="UTF-8" />
   <title>A-frame everyday</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-
-  <!--<script>
-    // Fade + switch visibilité entre 2 phases (dans la MÊME a-scene)
-    AFRAME.registerComponent("scene-switch", {
-      schema: {
-        hide: { type: "selector" },  // phase à cacher
-        show: { type: "selector" },  // phase à afficher
-        fade: { type: "selector" },
-        delay: { type: "number", default: 650 }
-      },
-      init() {
-        this.el.addEventListener("switchscene", () => {
-          const { hide, show, fade, delay } = this.data;
-          if (!fade || !hide || !show) return;
-
-          fade.setAttribute("visible", true);
-          fade.emit("fadein");
-
-          setTimeout(() => {
-            hide.setAttribute("visible", false);
-            show.setAttribute("visible", true);
-            fade.emit("fadeout");
-          }, delay);
-        });
-      }
-    });
-
-    // Zone + touche pour s'asseoir
-    AFRAME.registerComponent("sit-zone", {
-      schema: {
-        rig: { type: "selector" },
-        seat: { type: "selector" },
-        switcher: { type: "selector" },
-        sfx: { type: "selector" },
-        key: { type: "string", default: "e" },
-        ms: { type: "number", default: 900 },
-        hint: { type: "selector" }
-      },
-
-      init() {
-        this.inside = false;
-
-        this._onKeyDown = (ev) => {
-          if (!this.inside) return;
-          if (ev.key.toLowerCase() !== this.data.key.toLowerCase()) return;
-          this.sit();
-        };
-        window.addEventListener("keydown", this._onKeyDown);
-      },
-
-      remove() {
-        window.removeEventListener("keydown", this._onKeyDown);
-      },
-
-      tick() {
-        const rig = this.data.rig;
-        if (!rig) return;
-
-        const rigPos = new THREE.Vector3();
-        const zonePos = new THREE.Vector3();
-        rig.object3D.getWorldPosition(rigPos);
-        this.el.object3D.getWorldPosition(zonePos);
-
-        const g = this.el.getAttribute("geometry");
-        const radius = g ? Math.max(g.width, g.depth) * 0.5 : 1.5;
-
-        const nowInside = rigPos.distanceTo(zonePos) <= radius;
-
-        if (nowInside !== this.inside) {
-          this.inside = nowInside;
-          if (this.data.hint) this.data.hint.setAttribute("visible", this.inside);
-        }
-      },
-
-      sit() {
-        const { rig, seat, sfx, switcher, ms } = this.data;
-        if (!rig || !seat) return;
-
-        if (sfx?.components?.sound) sfx.components.sound.playSound();
-
-        const p = seat.getAttribute("position");
-        rig.setAttribute("animation__sit", {
-          property: "position",
-          to: `${p.x} ${p.y} ${p.z}`,
-          dur: ms,
-          easing: "easeOutCubic"
-        });
-
-        setTimeout(() => {
-          if (switcher) switcher.emit("switchscene");
-        }, ms + 150);
-      }
-    });
-  </script>-->
 </head>
 
 <body>
@@ -125,51 +30,27 @@
 
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
       <a-asset-item id="Porte-manteau" src="/EverydayVR/models/Coat-Rack.glb"></a-asset-item>
-       
+
       <img id="montagne-bg" src="/images/bg-montagne.png">
       <img id="montagne-2" src="/images/montagne-2.png">
       <img id="bg-left" src="/images/bg-leftside.png">
       <img id="bg-right" src="/images/bg-rightside.png">
       <img id="bg-en-face" src="/images/bg-en-face.png">
-
-
-      
     </a-assets>
 
-    <!-- RIG caméra (toujours visible) -->
+    <!-- RIG caméra (sans fade / sans cursor / sans interactions) -->
     <a-entity id="rig" position="0 1.6 4">
-      <a-camera>
-        <!-- FADE: attaché à la caméra (très important) -->
-        <a-plane
-          id="fade"
-          position="0 0 -0.6"
-          width="4" height="4"
-          visible="false"
-          material="color:#000; transparent:true; opacity:0"
-          animation__fadein="property: material.opacity; to: 1; dur: 450; easing: easeOutQuad; startEvents: fadein"
-          animation__fadeout="property: material.opacity; to: 0; dur: 450; easing: easeOutQuad; startEvents: fadeout"
-        ></a-plane>
-      </a-camera>
-
-      <!-- PC cursor -->
-      <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
+      <a-camera></a-camera>
     </a-entity>
-
-    <!-- VR controllers -->
-    <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
-    <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
 
     <!-- Lumières (toujours présentes) -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
     <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
 
-    <!-- ========= PHASE 1 ========= -->
+    <!-- ========= PHASE 1 (inchangée niveau objets) ========= -->
     <a-entity id="phase1" visible="true">
 
-      <!-- Son (optionnel : active seulement si tu mets un vrai audio dans assets) -->
-      <!-- <a-entity id="seatSound" sound="src:#seatSfx; autoplay:false; volume:1"></a-entity> -->
-
-       <a-sky color="#85754e"></a-sky>
+      <a-sky color="#85754e"></a-sky>
 
       <a-plane
         color="#9C8B61"
@@ -201,45 +82,14 @@
         scale="2 2 2">
       </a-entity>
 
-      <!-- Hint -->
-      <a-entity
-        id="sitHint"
-        position="-1.380 1.9 -1.500"
-        text="value: Appuie sur E pour t'asseoir; color: #111; align: center; width: 4"
-        visible="false">
-      </a-entity>
-
-      <!-- Zone d'assise -->
-      <a-box
-        id="sitZone"
-        position="-1.380 1.0 -1.500"
-        width="4"
-        height="2"
-        depth="4"
-        material="opacity: 0; transparent: true"
-        sit-zone="rig:#rig; seat:#seatPoint; switcher:#switcher; key:e; ms:900; hint:#sitHint">
-      </a-box>
-
-      <!-- Point d'assise -->
-      <a-entity id="seatPoint" position="-1.380 1.15 -1.25"></a-entity>
-
-      <!-- Switcher -->
-      <a-entity
-        id="switcher"
-        scene-switch="hide:#phase1; show:#phase2; fade:#fade; delay:650">
-      </a-entity>
-
-      <a-sky color="##94CEDB"></a-sky>
+      <!-- Tu avais un 2e sky dans phase1 : je le garde, mais couleur corrigée -->
+      <a-sky color="#94CEDB"></a-sky>
     </a-entity>
 
-    
-    
-    
-    <!-- ========= PHASE 2 ========= -->
+    <!-- ========= PHASE 2 (inchangée niveau objets) ========= -->
     <a-entity id="phase2" visible="false">
-      <!-- Mets ici ton décor 2 (sol, sky, objets, sons...) -->
-      <a-sky color="#94CEDB"></a-sky>
 
+      <a-sky color="#94CEDB"></a-sky>
 
       <a-entity
         id="benchModel"
@@ -248,9 +98,8 @@
         scale="150 150 150">
       </a-entity>
 
-     
       <a-plane
-        color="##FFFFFE"
+        color="#FFFFFE"
         height="100"
         width="100"
         rotation="-90 0 0"
@@ -263,11 +112,10 @@
           repeat: 100 100;
           normalScale: 1 1;
         ">
-
       </a-plane>
 
       <a-plane
-        color="##FFF4f7"
+        color="#FFF4F7"
         position="0.390 0.15 -1.450"
         height="3"
         width="5"
@@ -281,7 +129,6 @@
           repeat: 1 1;
           normalScale: 1 1;
         ">
-
       </a-plane>
 
       <a-image
