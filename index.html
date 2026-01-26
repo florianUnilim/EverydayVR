@@ -290,6 +290,7 @@
 
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
       <a-asset-item id="Porte-manteau" src="/EverydayVR/models/Coat-Rack.glb"></a-asset-item>
+      <a-asset-item id="trenchcoat" src="/EverydayVR/models/trenchcoat.glb"></a-asset-item>
 
       <img id="montagne-bg" src="/images/bg-montagne.png">
       <img id="montagne-2" src="/images/montagne-2.png">
@@ -300,7 +301,7 @@
 
     <!-- RIG = locomotion -->
 
-    
+
 <a-entity
   id="rig"
   position="0 1.2 4"
@@ -407,6 +408,13 @@
       <a-entity
         id="coatRack"
         gltf-model="#Porte-manteau"
+        position="-1.380 0 -0.472"
+        scale="2 2 2">
+      </a-entity>
+
+        <a-entity
+        id="trenchcoat"
+        gltf-model="#trenchcoat"
         position="-1.380 0 -0.472"
         scale="2 2 2">
       </a-entity>
