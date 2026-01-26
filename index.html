@@ -290,13 +290,13 @@
 
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
       <a-asset-item id="Porte-manteau" src="/EverydayVR/models/Coat-Rack.glb"></a-asset-item>
-      <a-asset-item id="trenchcoat" src="/EverydayVR/models/trenchcoat.glb"></a-asset-item>
 
       <img id="montagne-bg" src="/images/bg-montagne.png">
       <img id="montagne-2" src="/images/montagne-2.png">
       <img id="bg-left" src="/images/bg-leftside.png">
       <img id="bg-right" src="/images/bg-rightside.png">
       <img id="bg-en-face" src="/images/bg-en-face.png">
+      <img id="sol" src="/images/sol.png">
     </a-assets>
 
     <!-- RIG = locomotion -->
@@ -412,12 +412,6 @@
         scale="2 2 2">
       </a-entity>
 
-        <a-entity
-        id="trenchcoat"
-        gltf-model="#trenchcoat"
-        position="-1.380 0 -0.472"
-        scale="2 2 2">
-      </a-entity>
 
       <!-- Assise phase1 -->
       <a-entity id="seatPointPhase1" position="0.448 0.90 -2"></a-entity>
@@ -450,7 +444,7 @@
         ">
       </a-plane>
 
-      <a-plane
+      <!---<a-plane
         color="#FFF4F7"
         position="0.390 0.15 -1.450"
         height="3"
@@ -465,7 +459,24 @@
           repeat: 1 1;
           normalScale: 1 1;
         ">
-      </a-plane>
+      </a-plane>--->
+
+      <a-image
+        src="#sol"
+        position="0.390 0.15 -1.450"
+        height="3"
+        width="5"
+        rotation="-90 0 0"
+        material="
+          shader: standard;
+          src: #SnowDirtColor;
+          roughnessMap: #SnowDirtRough;
+          normalMap: #SnowDirtNormal;
+          metalness: 0;
+          repeat: 1 1;
+          normalScale: 1 1;
+        ">
+      </a-image>
 
       <a-image
         src="#montagne-2"
