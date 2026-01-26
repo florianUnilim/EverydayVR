@@ -213,7 +213,7 @@
   <a-scene>
 
     <!-- ASSETS -->
-    <a-assets>
+    <>
       <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
       <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg">
       <img id="fabricNormal" src="/EverydayVR/models/textures/Fabric019_1K-JPG_NormalGL.jpg">
@@ -238,28 +238,33 @@
       <img id="bg-left" src="/images/bg-leftside.png">
       <img id="bg-right" src="/images/bg-rightside.png">
       <img id="bg-en-face" src="/images/bg-en-face.png">
+
+
+      <img id="lidTex" src="/images/effet-paupiere.png">
+
     </a-assets>
 
     <!-- RIG + CAMERA + PAUPIÈRES -->
     <a-entity id="rig" position="0 1.6 4" rotation="0 0 0">
       <a-camera id="cam">
         <!-- Paupière haut -->
-        <a-plane id="lidTop"
-          position="0 0.55 -0.55"
-          width="4" height="2.4"
-          visible="false"
-          scale="1 0.001 1"
-          material="color:#000; transparent:false;">
-        </a-plane>
+       <a-plane id="lidTop"
+  position="0 0.55 -0.55"
+  width="4" height="2.4"
+  visible="false"
+  scale="1 0.001 1"
+  material="src:#lidTex; transparent:true; alphaTest:0.01;">
+</a-plane>
 
-        <!-- Paupière bas -->
-        <a-plane id="lidBot"
-          position="0 -0.55 -0.55"
-          width="4" height="2.4"
-          visible="false"
-          scale="1 0.001 1"
-          material="color:#000; transparent:false;">
-        </a-plane>
+<a-plane id="lidBot"
+  position="0 -0.55 -0.55"
+  width="4" height="2.4"
+  visible="false"
+  scale="1 0.001 1"
+  rotation="180 0 0"
+  material="src:#lidTex; transparent:true; alphaTest:0.01;">
+</a-plane>
+
       </a-camera>
 
       <!-- PC ray -->
