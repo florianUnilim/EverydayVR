@@ -296,7 +296,7 @@
       <img id="bg-left" src="/images/bg-leftside.png">
       <img id="bg-right" src="/images/bg-rightside.png">
       <img id="bg-en-face" src="/images/bg-en-face.png">
-      <img id="sol" src="/images/sol.png">
+      <img id="sol-mask" src="/images/sol-mask.png">
     </a-assets>
 
     <!-- RIG = locomotion -->
@@ -444,28 +444,31 @@
         ">
       </a-plane>
 
+      
       <a-plane
-        position="0.390 0.15 -1.450"
-        height="3"
-        width="5"
-        rotation="-90 0 0"
-        material="
-          shader: standard;
-          src: #SnowDirtColor;
-          roughnessMap: #SnowDirtRough;
-          normalMap: #SnowDirtNormal;
-          metalness: 0;
-          repeat: 1 1;
-          normalScale: 1 1;
+  id="sol"
+  position="0.390 0.15 -1.450"
+  height="3"
+  width="5"
+  rotation="-90 0 0"
+  material="
+    shader: standard;
 
-          transparent: true;
-          alphaMap: #sol;
-          alphaTest: 0.5;
+    src: #SnowDirtColor;
+    roughnessMap: #SnowDirtRough;
+    normalMap: #SnowDirtNormal;
+    metalness: 0;
+    normalScale: 1 1;
+    repeat: 1 1;
 
-          repeat: 1 1;
-          side: double;
-        ">
-      </a-plane>
+    transparent: true;
+    alphaMap: #sol-mask;
+    alphaTest: 0.5;
+
+    side: double;
+  ">
+</a-plane>
+
 
       
 
