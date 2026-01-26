@@ -376,11 +376,15 @@
         ">
       </a-plane>
 
-      <a-plane
+<a-plane
   position="0 1 -2"
   width="2"
   height="1"
-  material="src:#solMask; transparent:true">
+  material="
+    shader: basic;
+    src: #solMask;
+    transparent: true;
+  ">
 </a-plane>
 
 
@@ -453,25 +457,26 @@
       </a-plane>
 
       
-      <a-plane
+<a-plane
   id="sol"
   position="0.390 0.15 -1.450"
-  height="3"
-  width="5"
   rotation="-90 0 0"
+  width="5"
+  height="3"
   material="
     shader: standard;
 
     src: #SnowDirtColor;
     roughnessMap: #SnowDirtRough;
     normalMap: #SnowDirtNormal;
+
     metalness: 0;
-    normalScale: 1 1;
-    repeat: 1 1;
+    roughness: 1;
 
     transparent: true;
-    alphaMap: #sol-mask;
-    alphaTest: 0.5;
+    opacity: 1;
+    alphaMap: #solMask;
+    alphaTest: 0.3;
 
     side: double;
   ">
