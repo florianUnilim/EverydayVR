@@ -444,8 +444,7 @@
         ">
       </a-plane>
 
-      <!---<a-plane
-        color="#FFF4F7"
+      <a-plane
         position="0.390 0.15 -1.450"
         height="3"
         width="5"
@@ -458,25 +457,17 @@
           metalness: 0;
           repeat: 1 1;
           normalScale: 1 1;
-        ">
-      </a-plane>--->
 
-      <a-image
-        src="#sol"
-        position="0.390 0.15 -1.450"
-        height="3"
-        width="5"
-        rotation="-90 0 0"
-        material="
-          shader: standard;
-          src: #SnowDirtColor;
-          roughnessMap: #SnowDirtRough;
-          normalMap: #SnowDirtNormal;
-          metalness: 0;
+          transparent: true;
+          alphaMap: #sol;
+          alphaTest: 0.5;
+
           repeat: 1 1;
-          normalScale: 1 1;
+          side: double;
         ">
-      </a-image>
+      </a-plane>
+
+      
 
       <a-image
         src="#montagne-2"
