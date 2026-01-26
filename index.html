@@ -279,46 +279,47 @@
     </a-assets>
 
     <!-- RIG + CAMERA + PAUPIÈRES -->
-    <a-entity
+     
+   <!-- RIG = locomotion -->
+
+<a-entity
   id="rig"
   position="0 1.2 4"
   rotation="0 0 0"
-  movement-controls="
-    speed: 0.15;
-    fly: false;
-  "
+  movement-controls="speed: 0.15; fly: false"
 >
+  <!-- CAMERA = look -->
+  <a-camera id="cam" speed="0.15" look-controls="pointerLockEnabled: true">
 
+    <!-- Paupière haut -->
+    <a-plane id="lidTop"
+      position="0 1.25 -0.55"
+      width="4" height="2.6"
+      visible="false"
+      material="shader: flat; color:#000; transparent:true; opacity:0;">
+    </a-plane>
 
+    <!-- Paupière bas -->
+    <a-plane id="lidBot"
+      position="0 -1.25 -0.55"
+      width="4" height="2.6"
+      visible="false"
+      material="shader: flat; color:#000; transparent:true; opacity:0;">
+    </a-plane>
+
+  </a-camera>
+
+  <!-- PC ray (mouse) -->
+  <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
+</a-entity>
+
+<!-- VR: mains (optionnel mais utile) -->
 <a-entity hand-controls="left"></a-entity>
 <a-entity hand-controls="right"></a-entity>
 
-      <a-camera id="cam" speed="0.3">
-
-        <!-- Paupière haut -->
-        <a-plane id="lidTop"
-          position="0 1.25 -0.55"
-          width="4" height="2.6"
-          visible="false"
-          material="shader: flat; color:#000; transparent:true; opacity:0;">
-        </a-plane>
-
-        <!-- Paupière bas -->
-        <a-plane id="lidBot"
-          position="0 -1.25 -0.55"
-          width="4" height="2.6"
-          visible="false"
-          material="shader: flat; color:#000; transparent:true; opacity:0;">
-        </a-plane>
-      </a-camera>
-
-      <!-- PC ray -->
-      <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
-    </a-entity>
-
-    <!-- VR ray -->
-    <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
-    <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
+<!-- VR: lasers pour cliquer -->
+<a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
+<a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
 
     <!-- Lumières -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
