@@ -7,7 +7,7 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
   <script>
-    AFRAME.registerComponent("bench-sit-switch-simple", {
+    AFRAME.registerComponent("bench-sit-switch", {
       schema: {
         rig:   { type: "selector" },
         cam:   { type: "selector" },
@@ -23,7 +23,8 @@
 
         targetYaw: { type: "number", default: 180 },
         rotateMs:  { type: "number", default: 700 },
-        preDelayMs: { type: "number", default: 1200 },
+
+        preDelayMs: { type: "number", default: 1300 },
 
         closeMs:     { type: "number", default: 3000 },
         blackHoldMs: { type: "number", default: 1000 },
@@ -32,7 +33,7 @@
         move1Ms: { type: "number", default: 650 },
 
         standCamY: { type: "number", default: 1.6 },
-        sitCamY:   { type: "number", default: 1.02 }, // plus bas par défaut
+        sitCamY:   { type: "number", default: 1.0 },
 
         standOnAnyInput: { type: "boolean", default: true },
         standMoveThreshold: { type: "number", default: 0.12 }
@@ -68,13 +69,12 @@
         this.el.sceneEl.removeEventListener("tick", this._tickStand);
       },
 
-      // Paupières ouvertes = invisibles (scaleY petit)
-      setLidsOpenInstant() {
+      lidsOpenInstant() {
         const { lidTop, lidBot } = this.data;
+        lidTop.setAttribute("position", "0 1.2 -0.55");
+        lidBot.setAttribute("position", "0 -1.2 -0.55");
         lidTop.setAttribute("visible", false);
         lidBot.setAttribute("visible", false);
-        lidTop.setAttribute("scale", "1 0.001 1");
-        lidBot.setAttribute("scale", "1 0.001 1");
       },
 
       run() {
@@ -84,9 +84,9 @@
         if (this._running) return;
         this._running = true;
 
-        this.setLidsOpenInstant();
+        this.lidsOpenInstant();
 
-        // 1) rotation vers le sens du banc
+        // 1) rotation rig vers le sens du banc
         rig.setAttribute("animation__turn", {
           property: "rotation",
           to: `0 ${d.targetYaw} 0`,
@@ -94,7 +94,7 @@
           easing: "easeOutCubic"
         });
 
-        // 2) move vers seat1 (approche + mieux assis en phase1)
+        // 2) approche assise phase 1 (plus bas / plus sur le banc)
         const p1 = seat1.getAttribute("position");
         rig.setAttribute("animation__approach", {
           property: "position",
@@ -106,22 +106,20 @@
         const t0 = Math.max(d.rotateMs, d.move1Ms) + d.preDelayMs;
 
         setTimeout(() => {
-          // 3) fermer paupières (scaleY grandit)
+          // 3) fermer paupières (haut descend, bas monte)
           lidTop.setAttribute("visible", true);
           lidBot.setAttribute("visible", true);
 
           lidTop.setAttribute("animation__closeTop", {
-            property: "scale",
-            from: "1 0.001 1",
-            to:   "1 1 1",
+            property: "position",
+            to: "0 0.55 -0.55",
             dur: d.closeMs,
             easing: "easeInOutQuad"
           });
 
           lidBot.setAttribute("animation__closeBot", {
-            property: "scale",
-            from: "1 0.001 1",
-            to:   "1 1 1",
+            property: "position",
+            to: "0 -0.55 -0.55",
             dur: d.closeMs,
             easing: "easeInOutQuad"
           });
@@ -132,40 +130,34 @@
               phase1.setAttribute("visible", false);
               phase2.setAttribute("visible", true);
 
-              // spawn EXACT au point seat2 (assis)
+              // spawn assis phase 2
               const p2 = seat2.getAttribute("position");
               rig.setAttribute("position", `${p2.x} ${p2.y} ${p2.z}`);
-
-              // caméra basse assise
               cam.setAttribute("position", `0 ${d.sitCamY} 0`);
               this._isSitting = true;
 
-              // init pour détecter mouvement VR
+              // init mouvement VR
               cam.object3D.getWorldPosition(this._camWorldPrev);
 
-              // 5) ouvrir paupières (scaleY redevient minuscule)
+              // 5) ouverture paupières
               lidTop.setAttribute("animation__openTop", {
-                property: "scale",
-                from: "1 1 1",
-                to:   "1 0.001 1",
+                property: "position",
+                to: "0 1.2 -0.55",
                 dur: d.openMs,
                 easing: "easeOutQuad"
               });
 
               lidBot.setAttribute("animation__openBot", {
-                property: "scale",
-                from: "1 1 1",
-                to:   "1 0.001 1",
+                property: "position",
+                to: "0 -1.2 -0.55",
                 dur: d.openMs,
                 easing: "easeOutQuad"
               });
 
-              // cacher après ouverture
               setTimeout(() => {
                 lidTop.setAttribute("visible", false);
                 lidBot.setAttribute("visible", false);
                 this._running = false;
-
                 this.el.sceneEl.addEventListener("tick", this._tickStand);
               }, d.openMs + 80);
 
@@ -212,8 +204,7 @@
 <body>
   <a-scene>
 
-    <!-- ASSETS -->
-    <>
+    <a-assets>
       <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
       <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg">
       <img id="fabricNormal" src="/EverydayVR/models/textures/Fabric019_1K-JPG_NormalGL.jpg">
@@ -238,33 +229,26 @@
       <img id="bg-left" src="/images/bg-leftside.png">
       <img id="bg-right" src="/images/bg-rightside.png">
       <img id="bg-en-face" src="/images/bg-en-face.png">
-
-
-      <img id="lidTex" src="/images/effet-paupiere.png">
-
     </a-assets>
 
-    <!-- RIG + CAMERA + PAUPIÈRES -->
+    <!-- RIG -->
     <a-entity id="rig" position="0 1.6 4" rotation="0 0 0">
       <a-camera id="cam">
         <!-- Paupière haut -->
-       <a-plane id="lidTop"
-  position="0 0.55 -0.55"
-  width="4" height="2.4"
-  visible="false"
-  scale="1 0.001 1"
-  material="src:#lidTex; transparent:true; alphaTest:0.01;">
-</a-plane>
+        <a-plane id="lidTop"
+          position="0 1.2 -0.55"
+          width="4" height="2.4"
+          visible="false"
+          material="color:#000; transparent:false;">
+        </a-plane>
 
-<a-plane id="lidBot"
-  position="0 -0.55 -0.55"
-  width="4" height="2.4"
-  visible="false"
-  scale="1 0.001 1"
-  rotation="180 0 0"
-  material="src:#lidTex; transparent:true; alphaTest:0.01;">
-</a-plane>
-
+        <!-- Paupière bas -->
+        <a-plane id="lidBot"
+          position="0 -1.2 -0.55"
+          width="4" height="2.4"
+          visible="false"
+          material="color:#000; transparent:false;">
+        </a-plane>
       </a-camera>
 
       <!-- PC ray -->
@@ -275,13 +259,12 @@
     <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
     <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
 
-    <!-- Lumières -->
+    <!-- Lights -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
     <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
 
     <!-- ========= PHASE 1 ========= -->
     <a-entity id="phase1" visible="true">
-
       <a-sky color="#85754e"></a-sky>
 
       <a-plane
@@ -300,14 +283,13 @@
         ">
       </a-plane>
 
-      <!-- Banc (cliquable, phase1 seulement) -->
       <a-entity
         id="benchModel"
         class="clickable"
         gltf-model="#bancModel"
         position="-1.380 0 -1.500"
         scale="150 150 150"
-        bench-sit-switch-simple="
+        bench-sit-switch="
           rig:#rig;
           cam:#cam;
           lidTop:#lidTop;
@@ -323,7 +305,7 @@
           blackHoldMs:1000;
           openMs:2000;
           move1Ms:650;
-          sitCamY:1.02;
+          sitCamY:1.0;
           standCamY:1.6;
           standMoveThreshold:0.12;
           standOnAnyInput:true;
@@ -337,17 +319,15 @@
         scale="2 2 2">
       </a-entity>
 
-      <!-- Point d'approche/assise phase1 (plus bas + sur le banc) -->
-      <!-- Ajuste si besoin : baisse Y (ex 1.00) / rapproche Z (ex -1.40) -->
-      <a-entity id="seatPointPhase1" position="-1.380 1.05 -1.40"></a-entity>
-
+      <!-- Phase 1 : assise plus basse + plus sur le banc -->
+      <a-entity id="seatPointPhase1" position="-1.380 0.95 -1.40"></a-entity>
     </a-entity>
 
     <!-- ========= PHASE 2 ========= -->
     <a-entity id="phase2" visible="false">
       <a-sky color="#94CEDB"></a-sky>
 
-      <!-- Banc phase2 : pas cliquable (PAS de class clickable) -->
+      <!-- Banc phase 2 NON cliquable -->
       <a-entity
         id="benchModel_phase2"
         gltf-model="#bancModel"
@@ -421,10 +401,8 @@
         height="50">
       </a-image>
 
-      <!-- Spawn assis : banc phase2 + petit décalage à gauche (X -0.18) -->
-      <!-- Ajuste X si besoin (-0.10 à -0.30) -->
+      <!-- Phase 2 : spawn sur banc + décalé à gauche -->
       <a-entity id="seatPointPhase2" position="-1.560 0.15 -1.500"></a-entity>
-
     </a-entity>
 
   </a-scene>
