@@ -50,6 +50,11 @@
         this._camWorld = new THREE.Vector3();
         this._camWorldPrev = new THREE.Vector3();
 
+        // === AJOUT: éviter que movement-controls annule la téléportation / anim ===
+        this._savedMoveControls = null;
+        this._moveWasRemoved = false;
+        // =======================================================================
+
         this.onClick = () => this.run();
         this.el.addEventListener("click", this.onClick);
 
@@ -95,6 +100,14 @@
         this._running = true;
 
         this.resetLidsInstant();
+
+        // === AJOUT: couper movement-controls pendant la téléport/anim (sinon ça peut annuler) ===
+        this._savedMoveControls = rig.getAttribute("movement-controls");
+        if (this._savedMoveControls) {
+          rig.removeAttribute("movement-controls");
+          this._moveWasRemoved = true;
+        }
+        // ====================================================================================
 
         // 1) rotation vers le sens du banc
         rig.setAttribute("animation__turn", {
@@ -169,7 +182,7 @@
               // init mouvement VR
               cam.object3D.getWorldPosition(this._camWorldPrev);
 
-              // 5) Ouverture (2s) — d'abord mouvement, puis on baisse un peu l'opacité vers la fin
+              // 5) Ouverture (2s)
               lidTop.setAttribute("animation__openPos", {
                 property: "position",
                 to: "0 1.25 -0.55",
@@ -202,6 +215,13 @@
                 lidTop.setAttribute("visible", false);
                 lidBot.setAttribute("visible", false);
                 this._running = false;
+
+                // === AJOUT: remettre movement-controls après la transition ===
+                if (this._moveWasRemoved) {
+                  rig.setAttribute("movement-controls", this._savedMoveControls);
+                  this._moveWasRemoved = false;
+                }
+                // ==========================================================
 
                 // activer lever sur mouvement
                 this.el.sceneEl.addEventListener("tick", this._tickStand);
@@ -248,7 +268,7 @@
 </head>
 
 <body>
-  <a-scene >
+  <a-scene>
 
     <!-- ASSETS -->
     <a-assets>
@@ -278,48 +298,45 @@
       <img id="bg-en-face" src="/images/bg-en-face.png">
     </a-assets>
 
-    <!-- RIG + CAMERA + PAUPIÈRES -->
+    <!-- RIG = locomotion -->
+    <a-entity
+      id="rig"
+      position="0 1.2 4"
+      rotation="0 0 0"
+      movement-controls="speed: 0.15; fly: false"
+    >
+      <!-- CAMERA -->
+      <a-camera id="cam" speed="0.15" look-controls="pointerLockEnabled: true">
 
-   <!-- RIG = locomotion -->
+        <!-- Paupière haut -->
+        <a-plane id="lidTop"
+          position="0 1.25 -0.55"
+          width="4" height="2.6"
+          visible="false"
+          material="shader: flat; color:#000; transparent:true; opacity:0;">
+        </a-plane>
 
-<a-entity
-  id="rig"
-  position="0 1.2 4"
-  rotation="0 0 0"
-  movement-controls="speed: 0.15; fly: false"
->
-  <!-- CAMERA = look -->
-  <a-camera id="cam" speed="0.15">
+        <!-- Paupière bas -->
+        <a-plane id="lidBot"
+          position="0 -1.25 -0.55"
+          width="4" height="2.6"
+          visible="false"
+          material="shader: flat; color:#000; transparent:true; opacity:0;">
+        </a-plane>
 
-    <!-- Paupière haut -->
-    <a-plane id="lidTop"
-      position="0 1.25 -0.55"
-      width="4" height="2.6"
-      visible="false"
-      material="shader: flat; color:#000; transparent:true; opacity:0;">
-    </a-plane>
+      </a-camera>
 
-    <!-- Paupière bas -->
-    <a-plane id="lidBot"
-      position="0 -1.25 -0.55"
-      width="4" height="2.6"
-      visible="false"
-      material="shader: flat; color:#000; transparent:true; opacity:0;">
-    </a-plane>
+      <!-- PC ray (mouse) -->
+      <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
+    </a-entity>
 
-  </a-camera>
+    <!-- VR: mains -->
+    <a-entity hand-controls="left"></a-entity>
+    <a-entity hand-controls="right"></a-entity>
 
-  <!-- PC ray (mouse) -->
-  <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
-</a-entity>
-
-<!-- VR: mains (optionnel mais utile) -->
-<a-entity hand-controls="left"></a-entity>
-<a-entity hand-controls="right"></a-entity>
-
-<!-- VR: lasers pour cliquer -->
-<a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
-<a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
+    <!-- VR: lasers pour cliquer -->
+    <a-entity laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
+    <a-entity laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
 
     <!-- Lumières -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
@@ -381,8 +398,7 @@
         scale="2 2 2">
       </a-entity>
 
-      <!-- Assise phase1 : plus bas + plus sur le banc -->
-      <!-- Ajuste surtout Y (0.85-1.05) et Z (plus près du banc) -->
+      <!-- Assise phase1 -->
       <a-entity id="seatPointPhase1" position="0.448 0.90 -2"></a-entity>
     </a-entity>
 
@@ -390,7 +406,6 @@
     <a-entity id="phase2" visible="false">
       <a-sky color="#94CEDB"></a-sky>
 
-      <!-- Banc phase2 : NON cliquable (pas de class clickable) -->
       <a-entity
         id="benchModel_phase2"
         gltf-model="#bancModel"
@@ -464,7 +479,7 @@
         height="50">
       </a-image>
 
-      <!-- Assise phase2 : sur banc + léger décalage à gauche -->
+      <!-- Assise phase2 -->
       <a-entity id="seatPointPhase2" position="0.448 0.90 -2"></a-entity>
     </a-entity>
 
