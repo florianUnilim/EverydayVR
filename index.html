@@ -281,6 +281,7 @@
     <!-- RIG + CAMERA + PAUPIÈRES -->
     <a-entity id="rig" position="0 1.6 4" rotation="0 0 0">
       <a-camera id="cam">
+
         <!-- Paupière haut -->
         <a-plane id="lidTop"
           position="0 1.25 -0.55"
@@ -368,7 +369,7 @@
 
       <!-- Assise phase1 : plus bas + plus sur le banc -->
       <!-- Ajuste surtout Y (0.85-1.05) et Z (plus près du banc) -->
-      <a-entity id="seatPointPhase1" position="-1.380 0.90 -1.45"></a-entity>
+      <a-entity id="seatPointPhase1" position="-1.380 0.90 -1.500"></a-entity>
     </a-entity>
 
     <!-- ========= PHASE 2 ========= -->
@@ -450,8 +451,7 @@
       </a-image>
 
       <!-- Assise phase2 : sur banc + léger décalage à gauche -->
-      <!-- Base banc: -1.380 0.15 -1.500 -> on décale X vers la gauche -->
-      <a-entity id="seatPointPhase2" position="-1.520 0.15 -1.500"></a-entity>
+      <a-entity id="seatPointPhase2" position="-1.380 0.15 -1.500"></a-entity>
     </a-entity>
 
   </a-scene>
