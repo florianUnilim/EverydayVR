@@ -500,13 +500,14 @@ AFRAME.registerComponent("mute-when-looked", {
 
     <!-- RIG = locomotion -->
     <a-entity
-      movement-controls="constrainToNavMesh: true"
       id="rig"
       position="0 1.2 4"
       rotation="0 0 0"
-      movement-controls="speed: 0.15; fly: false"
+      movement-controls="speed: 0.15; fly: false constrainToNavMesh: true"
       turn-sound-switch="cam: #cam; front: #soundFront; back: #soundBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
     >
+    <!-- CAMERA = tête -->
+      <a-camera id="cam" speed="0.15">
 
       <!-- Son qui est DEVANT toi (collé à ton regard) -->
       <a-entity
@@ -524,8 +525,7 @@ AFRAME.registerComponent("mute-when-looked", {
   mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 1; offVolume: 0">
 </a-entity>
 
-      <!-- CAMERA = tête -->
-      <a-camera id="cam" speed="0.15">
+      
 
         <!-- Paupière haut -->
         <a-plane id="lidTop"
