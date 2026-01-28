@@ -320,11 +320,18 @@
       }
 
       // ✅ entrée en phase2 : force start (si audio déverrouillé)
-      if (!this._phaseWasVisible) {
-        try { frontSound?.playSound(); } catch (e) {}
-        try { backSound?.playSound(); } catch (e) {}
-        this._phaseWasVisible = true;
-      }
+if (!this._phaseWasVisible) {
+  // tentative immédiate
+  try { frontSound?.playSound(); } catch (e) {}
+  try { backSound?.playSound(); } catch (e) {}
+  this._phaseWasVisible = true;
+
+  // retry léger (au cas où l'unlock vient juste d'arriver)
+  setTimeout(() => {
+    try { frontSound?.playSound(); } catch (e) {}
+    try { backSound?.playSound(); } catch (e) {}
+  }, 200);
+}
 
       const camObj = camEl.object3D;
 
@@ -384,77 +391,97 @@
   });
 
   /* =========================================================
-   SON : AUTOPLAY UNLOCK (ULTRA ROBUSTE) + PAS DE SON EN PHASE1
-   (version corrigée : ne se "verrouille" pas tant que
-   AudioContext + components.sound ne sont pas prêts)
+   SON : AUTOPLAY UNLOCK (BÉTON)
+   - Resume AudioContext jusqu'à state === "running"
+   - Attend sound-loaded avant play
+   - N'empêche pas de retenter si ça a raté
    ========================================================= */
 (function () {
-  let unlocked = false;
+  const scene = () => document.querySelector("a-scene");
+  const phase2 = () => document.querySelector("#phase2");
+  const frontEl = () => document.querySelector("#soundFront");
+  const backEl  = () => document.querySelector("#soundBack");
 
-  const tryUnlock = () => {
-    if (unlocked) return;
+  const waitSoundLoaded = (el) => new Promise((resolve) => {
+    if (!el) return resolve(false);
+    // si déjà chargé
+    if (el.components && el.components.sound && el.components.sound.pool && el.components.sound.pool.children.length) {
+      return resolve(true);
+    }
+    // sinon on attend l’event A-Frame
+    const onLoaded = () => {
+      el.removeEventListener("sound-loaded", onLoaded);
+      resolve(true);
+    };
+    el.addEventListener("sound-loaded", onLoaded, { once: true });
+    // fallback au cas où l'event ne remonte pas
+    setTimeout(() => resolve(true), 2000);
+  });
 
-    const scene = document.querySelector("a-scene");
-    const ctx = scene?.audioListener?.context;
+  const resumeContextUntilRunning = async () => {
+    const sc = scene();
+    const ctx = sc?.audioListener?.context;
+    if (!ctx) return false;
 
-    const frontEl = document.querySelector("#soundFront");
-    const backEl  = document.querySelector("#soundBack");
-    const f = frontEl?.components?.sound;
-    const b = backEl?.components?.sound;
+    // tente plusieurs fois (certains navigateurs sont capricieux)
+    for (let i = 0; i < 8; i++) {
+      try { await ctx.resume(); } catch (e) {}
+      if (ctx.state === "running") return true;
+      await new Promise(r => setTimeout(r, 80));
+    }
+    return ctx.state === "running";
+  };
 
-    // ✅ Si A-Frame n'est pas prêt, on ne bloque pas, on retentera au prochain geste
-    if (!scene || !ctx || !f || !b) return;
+  const unlockAndMaybePlay = async () => {
+    const fEl = frontEl();
+    const bEl = backEl();
+    if (!fEl || !bEl) return;
 
-    // ✅ maintenant seulement on peut considérer que c’est “unlock”
-    unlocked = true;
+    // 1) audio context running
+    const ok = await resumeContextUntilRunning();
+    if (!ok) return;
 
-    // 1) Resume AudioContext (fix Chrome)
-    try { ctx.resume && ctx.resume(); } catch (e) {}
+    // 2) attendre que les buffers audio soient chargés
+    await Promise.all([waitSoundLoaded(fEl), waitSoundLoaded(bEl)]);
 
-    // 2) Force play (valide le user gesture)
+    const f = fEl.components?.sound;
+    const b = bEl.components?.sound;
+    if (!f || !b) return;
+
+    // 3) play "pour valider" (même si volume 0), puis pause si pas phase2
     try { f.playSound(); } catch (e) {}
     try { b.playSound(); } catch (e) {}
 
-    // 3) Si pas en phase2, on repause direct (on garde juste l’unlock)
-    const phase2 = document.querySelector("#phase2");
-    const isPhase2 = phase2 && phase2.getAttribute("visible") !== false;
+    const p2 = phase2();
+    const isPhase2 = p2 && p2.getAttribute("visible") !== false;
+
     if (!isPhase2) {
       try { f.pauseSound(); } catch (e) {}
       try { b.pauseSound(); } catch (e) {}
     }
   };
 
-  // ✅ Le mieux : écouter sur le canvas A-Frame quand il existe
-  const hookCanvas = () => {
-    const scene = document.querySelector("a-scene");
-    const canvas = scene?.canvas;
-    if (!canvas) return false;
+  const bindGesture = () => {
+    const sc = scene();
+    const canvas = sc?.canvas;
 
-    canvas.addEventListener("pointerdown", tryUnlock, { passive: true });
-    canvas.addEventListener("touchstart", tryUnlock, { passive: true });
-    canvas.addEventListener("click", tryUnlock, { passive: true });
-    return true;
+    const target = canvas || window;
+
+    // pointerdown = le + fiable pour "user gesture"
+    target.addEventListener("pointerdown", unlockAndMaybePlay, { passive: true });
+    target.addEventListener("touchstart", unlockAndMaybePlay, { passive: true });
+    target.addEventListener("click", unlockAndMaybePlay, { passive: true });
+    window.addEventListener("keydown", unlockAndMaybePlay);
   };
 
-  // Events window (backup)
-  window.addEventListener("pointerdown", tryUnlock, { passive: true });
-  window.addEventListener("touchstart", tryUnlock, { passive: true });
-  window.addEventListener("keydown", tryUnlock);
-  window.addEventListener("click", tryUnlock);
-
-  // Quand la scène est prête, on branche le canvas (le plus fiable)
   document.addEventListener("DOMContentLoaded", () => {
-    const scene = document.querySelector("a-scene");
-    if (!scene) return;
-
-    // si déjà prêt
-    if (!hookCanvas()) {
-      scene.addEventListener("loaded", () => {
-        hookCanvas();
-      });
-    }
+    const sc = scene();
+    if (!sc) return;
+    if (sc.hasLoaded) bindGesture();
+    else sc.addEventListener("loaded", bindGesture, { once: true });
   });
 })();
+
 
 </script>
 ```
