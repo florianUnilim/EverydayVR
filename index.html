@@ -384,46 +384,78 @@
   });
 
   /* =========================================================
-     SON : AUTOPLAY UNLOCK (ULTRA ROBUSTE) + PAS DE SON EN PHASE1
-     ========================================================= */
-  (function () {
-    let unlocked = false;
+   SON : AUTOPLAY UNLOCK (ULTRA ROBUSTE) + PAS DE SON EN PHASE1
+   (version corrigée : ne se "verrouille" pas tant que
+   AudioContext + components.sound ne sont pas prêts)
+   ========================================================= */
+(function () {
+  let unlocked = false;
 
-    const unlock = () => {
-      if (unlocked) return;
-      unlocked = true;
+  const tryUnlock = () => {
+    if (unlocked) return;
 
-      const phase2 = document.querySelector("#phase2");
-      const isPhase2 = phase2 && phase2.getAttribute("visible") !== false;
+    const scene = document.querySelector("a-scene");
+    const ctx = scene?.audioListener?.context;
 
-      const frontEl = document.querySelector("#soundFront");
-      const backEl  = document.querySelector("#soundBack");
+    const frontEl = document.querySelector("#soundFront");
+    const backEl  = document.querySelector("#soundBack");
+    const f = frontEl?.components?.sound;
+    const b = backEl?.components?.sound;
 
-      const f = frontEl?.components?.sound;
-      const b = backEl?.components?.sound;
+    // ✅ Si A-Frame n'est pas prêt, on ne bloque pas, on retentera au prochain geste
+    if (!scene || !ctx || !f || !b) return;
 
-      // 1) Resume AudioContext A-Frame (fix Chrome)
-      const scene = document.querySelector("a-scene");
-      const ctx = scene?.audioListener?.context;
-      try { ctx?.resume && ctx.resume(); } catch (e) {}
+    // ✅ maintenant seulement on peut considérer que c’est “unlock”
+    unlocked = true;
 
-      // 2) Force play pour valider le "user gesture"
-      try { f?.playSound(); } catch (e) {}
-      try { b?.playSound(); } catch (e) {}
+    // 1) Resume AudioContext (fix Chrome)
+    try { ctx.resume && ctx.resume(); } catch (e) {}
 
-      // 3) Si pas en phase2, on repause direct
-      if (!isPhase2) {
-        try { f?.pauseSound(); } catch (e) {}
-        try { b?.pauseSound(); } catch (e) {}
-      }
-    };
+    // 2) Force play (valide le user gesture)
+    try { f.playSound(); } catch (e) {}
+    try { b.playSound(); } catch (e) {}
 
-    // Events les + fiables pour autoriser audio
-    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
-    window.addEventListener("touchstart", unlock, { once: true, passive: true });
-    window.addEventListener("keydown", unlock, { once: true });
-    window.addEventListener("click", unlock, { once: true }); // backup
-  })();
+    // 3) Si pas en phase2, on repause direct (on garde juste l’unlock)
+    const phase2 = document.querySelector("#phase2");
+    const isPhase2 = phase2 && phase2.getAttribute("visible") !== false;
+    if (!isPhase2) {
+      try { f.pauseSound(); } catch (e) {}
+      try { b.pauseSound(); } catch (e) {}
+    }
+  };
+
+  // ✅ Le mieux : écouter sur le canvas A-Frame quand il existe
+  const hookCanvas = () => {
+    const scene = document.querySelector("a-scene");
+    const canvas = scene?.canvas;
+    if (!canvas) return false;
+
+    canvas.addEventListener("pointerdown", tryUnlock, { passive: true });
+    canvas.addEventListener("touchstart", tryUnlock, { passive: true });
+    canvas.addEventListener("click", tryUnlock, { passive: true });
+    return true;
+  };
+
+  // Events window (backup)
+  window.addEventListener("pointerdown", tryUnlock, { passive: true });
+  window.addEventListener("touchstart", tryUnlock, { passive: true });
+  window.addEventListener("keydown", tryUnlock);
+  window.addEventListener("click", tryUnlock);
+
+  // Quand la scène est prête, on branche le canvas (le plus fiable)
+  document.addEventListener("DOMContentLoaded", () => {
+    const scene = document.querySelector("a-scene");
+    if (!scene) return;
+
+    // si déjà prêt
+    if (!hookCanvas()) {
+      scene.addEventListener("loaded", () => {
+        hookCanvas();
+      });
+    }
+  });
+})();
+
 </script>
 ```
 
