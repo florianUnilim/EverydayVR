@@ -7,6 +7,46 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
   <script>
+    /* =========================================================
+       SON : MUTE QUAND REGARDE L'OBJET
+       ========================================================= */
+
+AFRAME.registerComponent("mute-when-looked", {
+  schema: {
+    camera: { type: "selector" },
+    threshold: { type: "number", default: 0.95 },
+    onVolume: { type: "number", default: 1 },
+    offVolume: { type: "number", default: 0 }
+  },
+
+  tick: function () {
+    const camEl = this.data.camera;
+    if (!camEl) return;
+
+    const cam = camEl.object3D;
+    const obj = this.el.object3D;
+
+    const camDir = new THREE.Vector3();
+    cam.getWorldDirection(camDir);
+
+    const camPos = new THREE.Vector3();
+    cam.getWorldPosition(camPos);
+
+    const objPos = new THREE.Vector3();
+    obj.getWorldPosition(objPos);
+
+    const toObj = objPos.sub(camPos).normalize();
+    const dot = camDir.dot(toObj);
+
+    const sound = this.el.components.sound;
+    if (!sound) return;
+
+    // si je regarde l'objet => coupe
+    sound.setVolume(dot > this.data.threshold ? this.data.offVolume : this.data.onVolume);
+  }
+});
+
+
     AFRAME.registerComponent("bench-sit-transition", {
       schema: {
         rig:   { type: "selector" },
@@ -451,17 +491,19 @@
 
       <!-- Son qui est DEVANT toi (collé à ton regard) -->
       <a-entity
-        id="soundFront"
-        position="0 0 -3"
-        sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 0;">
-      </a-entity>
+  id="soundFront"
+  position="0 0 -3"
+  sound="src: url(sons/voices-murmur.mp3); autoplay: true; loop: true; positional: true; volume: 1;"
+  mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 1; offVolume: 0">
+</a-entity>
 
       <!-- Son qui est DERRIÈRE toi -->
       <a-entity
-        id="soundBack"
-        position="0 0 3"
-        sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
-      </a-entity>
+  id="soundBack"
+  position="0 0 3"
+  sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;"
+  mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 1; offVolume: 0">
+</a-entity>
 
       <!-- CAMERA = tête -->
       <a-camera id="cam" speed="0.15">
