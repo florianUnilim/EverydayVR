@@ -19,9 +19,16 @@ AFRAME.registerComponent("mute-when-looked", {
     offVolume: { type: "number", default: 0 }
   },
 
+  init: function () {
+    this._isMuted = null; // pour éviter de remettre le volume 60 fois/sec
+  },
+
   tick: function () {
     const camEl = this.data.camera;
     if (!camEl) return;
+
+    const soundComp = this.el.components.sound;
+    if (!soundComp) return;
 
     const cam = camEl.object3D;
     const obj = this.el.object3D;
@@ -38,13 +45,21 @@ AFRAME.registerComponent("mute-when-looked", {
     const toObj = objPos.sub(camPos).normalize();
     const dot = camDir.dot(toObj);
 
-    const sound = this.el.components.sound;
-    if (!sound) return;
+    const shouldMute = dot > this.data.threshold;
 
-    // si je regarde l'objet => coupe
-    sound.setVolume(dot > this.data.threshold ? this.data.offVolume : this.data.onVolume);
+    // seulement si ça change (évite le spam)
+    if (this._isMuted === shouldMute) return;
+    this._isMuted = shouldMute;
+
+    this.el.setAttribute(
+      "sound",
+      "volume",
+      shouldMute ? this.data.offVolume : this.data.onVolume
+    );
   }
 });
+
+
 
 
     AFRAME.registerComponent("bench-sit-transition", {
