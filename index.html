@@ -18,24 +18,29 @@
         phase1:{ type: "selector" },
         phase2:{ type: "selector" },
 
-        seat1: { type: "selector" },
-        seat2: { type: "selector" },
+        seat1: { type: "selector" }, // assise phase1
+        seat2: { type: "selector" }, // assise phase2 (spawn assis)
 
+        // Orientation
         targetYaw: { type: "number", default: 180 },
         rotateMs:  { type: "number", default: 700 },
 
-        preDelayMs:   { type: "number", default: 1300 },
-        closeMs:      { type: "number", default: 3000 },
-        blackHoldMs:  { type: "number", default: 1000 },
-        openMs:       { type: "number", default: 2000 },
+        // Timing demandé
+        preDelayMs:   { type: "number", default: 1300 }, // 1-2s avant noir
+        closeMs:      { type: "number", default: 3000 }, // fermeture / fondu noir 3s
+        blackHoldMs:  { type: "number", default: 1000 }, // noir maintenu 1s
+        openMs:       { type: "number", default: 2000 }, // ouverture 2s
 
+        // Mouvement vers le banc phase1
         move1Ms: { type: "number", default: 650 },
 
+        // Assis / debout
         standCamY: { type: "number", default: 1.6 },
-        sitCamY:   { type: "number", default: 0.95 },
+        sitCamY:   { type: "number", default: 0.95 }, // assis plus bas
 
+        // Se lever
         standOnAnyInput: { type: "boolean", default: true },
-        standMoveThreshold: { type: "number", default: 0.12 }
+        standMoveThreshold: { type: "number", default: 0.12 } // mouvement VR
       },
 
       init() {
@@ -45,15 +50,17 @@
         this._camWorld = new THREE.Vector3();
         this._camWorldPrev = new THREE.Vector3();
 
-        // éviter que movement-controls annule la téléportation / anim
+        // === AJOUT: éviter que movement-controls annule la téléportation / anim ===
         this._savedMoveControls = null;
         this._moveWasRemoved = false;
+        // =======================================================================
 
         this.onClick = () => this.run();
         this.el.addEventListener("click", this.onClick);
 
         this._tickStand = this._tickStand.bind(this);
 
+        // ZQSD + flèches + espace
         this._onKeyDown = (e) => {
           if (!this._isSitting) return;
           if (!this.data.standOnAnyInput) return;
@@ -75,8 +82,10 @@
 
       resetLidsInstant() {
         const { lidTop, lidBot } = this.data;
+        // Position "ouverte" (hors écran)
         lidTop.setAttribute("position", "0 1.25 -0.55");
         lidBot.setAttribute("position", "0 -1.25 -0.55");
+        // Opacité à 0 (invisible)
         lidTop.setAttribute("material", "opacity", 0);
         lidBot.setAttribute("material", "opacity", 0);
         lidTop.setAttribute("visible", false);
@@ -92,13 +101,15 @@
 
         this.resetLidsInstant();
 
-        // couper movement-controls pendant la transition
+        // === AJOUT: couper movement-controls pendant la téléport/anim (sinon ça peut annuler) ===
         this._savedMoveControls = rig.getAttribute("movement-controls");
         if (this._savedMoveControls) {
           rig.removeAttribute("movement-controls");
           this._moveWasRemoved = true;
         }
+        // ====================================================================================
 
+        // 1) rotation vers le sens du banc
         rig.setAttribute("animation__turn", {
           property: "rotation",
           to: `0 ${d.targetYaw} 0`,
@@ -106,6 +117,7 @@
           easing: "easeOutCubic"
         });
 
+        // 2) move vers assise phase1 (mieux sur le banc)
         const p1 = seat1.getAttribute("position");
         rig.setAttribute("animation__approach", {
           property: "position",
@@ -117,12 +129,15 @@
         const t0 = Math.max(d.rotateMs, d.move1Ms) + d.preDelayMs;
 
         setTimeout(() => {
+          // 3) Fermeture "œil" + fondu noir (opacity monte)
           lidTop.setAttribute("visible", true);
           lidBot.setAttribute("visible", true);
 
+          // Assurer que c'est "flat" pour un noir propre en VR
           lidTop.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
           lidBot.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
 
+          // Animation position (paupières qui se ferment)
           lidTop.setAttribute("animation__closePos", {
             property: "position",
             to: "0 0.55 -0.55",
@@ -136,6 +151,7 @@
             easing: "easeInOutQuad"
           });
 
+          // Animation opacity (fondu noir smooth)
           lidTop.setAttribute("animation__closeOp", {
             property: "material.opacity",
             to: 1,
@@ -149,19 +165,24 @@
             easing: "easeInOutQuad"
           });
 
+          // 4) Après fermeture (3s) + noir maintenu (1s)
           setTimeout(() => {
             setTimeout(() => {
+              // Switch phase + spawn assis phase2
               phase1.setAttribute("visible", false);
               phase2.setAttribute("visible", true);
 
               const p2 = seat2.getAttribute("position");
               rig.setAttribute("position", `${p2.x} ${p2.y} ${p2.z}`);
 
+              // caméra assise (bas)
               cam.setAttribute("position", `0 ${d.sitCamY} 0`);
               this._isSitting = true;
 
+              // init mouvement VR
               cam.object3D.getWorldPosition(this._camWorldPrev);
 
+              // 5) Ouverture (2s)
               lidTop.setAttribute("animation__openPos", {
                 property: "position",
                 to: "0 1.25 -0.55",
@@ -175,6 +196,7 @@
                 easing: "easeOutQuad"
               });
 
+              // Opacité qui redescend pendant l'ouverture (smooth)
               lidTop.setAttribute("animation__openOp", {
                 property: "material.opacity",
                 to: 0,
@@ -188,16 +210,20 @@
                 easing: "easeOutQuad"
               });
 
+              // Cleanup
               setTimeout(() => {
                 lidTop.setAttribute("visible", false);
                 lidBot.setAttribute("visible", false);
                 this._running = false;
 
+                // === AJOUT: remettre movement-controls après la transition ===
                 if (this._moveWasRemoved) {
                   rig.setAttribute("movement-controls", this._savedMoveControls);
                   this._moveWasRemoved = false;
                 }
+                // ==========================================================
 
+                // activer lever sur mouvement
                 this.el.sceneEl.addEventListener("tick", this._tickStand);
               }, d.openMs + 80);
 
@@ -238,18 +264,163 @@
         this.el.sceneEl.removeEventListener("tick", this._tickStand);
       }
     });
+
+    /* =========================================================
+       SON : SWITCH AUDIO DEVANT/DERRIÈRE (ACTIF UNIQUEMENT PHASE2)
+       ========================================================= */
+    AFRAME.registerComponent("turn-sound-switch", {
+      schema: {
+        cam: { type: "selector" },
+        front: { type: "selector" },
+        back: { type: "selector" },
+
+        // ✅ active uniquement si cette scène est visible
+        scene: { type: "selector" },
+
+        threshold: { type: "number", default: 0.35 }, // ~70°
+        fadeMs: { type: "number", default: 450 }
+      },
+
+      init() {
+        this.state = null;
+        this._raf = null;
+
+        this._q = new THREE.Quaternion();
+        this._forward = new THREE.Vector3();
+        this._toFront = new THREE.Vector3();
+        this._camPos = new THREE.Vector3();
+        this._frontPos = new THREE.Vector3();
+
+        this._phaseWasVisible = false;
+      },
+
+      tick() {
+        const sceneEl = this.data.scene;
+
+        const camEl = this.data.cam;
+        const frontEl = this.data.front;
+        const backEl = this.data.back;
+        if (!camEl || !frontEl || !backEl) return;
+
+        const frontSound = frontEl.components.sound;
+        const backSound = backEl.components.sound;
+
+        // ✅ Phase2 only
+        const phaseVisible = !sceneEl || sceneEl.getAttribute("visible") !== false;
+
+        if (!phaseVisible) {
+          if (this._phaseWasVisible) {
+            try { frontSound?.pauseSound(); } catch (e) {}
+            try { backSound?.pauseSound(); } catch (e) {}
+            this.state = null;
+          }
+          this._phaseWasVisible = false;
+          return;
+        }
+
+        // ✅ entrée en phase2 : force start (si audio déverrouillé)
+        if (!this._phaseWasVisible) {
+          try { frontSound?.playSound(); } catch (e) {}
+          try { backSound?.playSound(); } catch (e) {}
+          this._phaseWasVisible = true;
+        }
+
+        const camObj = camEl.object3D;
+
+        // forward caméra
+        camObj.getWorldQuaternion(this._q);
+        this._forward.set(0, 0, -1).applyQuaternion(this._q).normalize();
+
+        // vecteur caméra -> front
+        this._camPos.setFromMatrixPosition(camObj.matrixWorld);
+        this._frontPos.setFromMatrixPosition(frontEl.object3D.matrixWorld);
+        this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
+
+        const dot = this._forward.dot(this._toFront); // 1 = regarde front ; -1 = tourne dos
+
+        const next = (dot >= this.data.threshold) ? "front" : "back";
+        if (next !== this.state) {
+          this.state = next;
+          this._crossfade(
+            next === "front" ? frontEl : backEl,
+            next === "front" ? backEl : frontEl
+          );
+        }
+      },
+
+      _crossfade(onEl, offEl) {
+        const onSound = onEl.components.sound;
+        const offSound = offEl.components.sound;
+        if (!onSound || !offSound) return;
+
+        try { onSound.playSound(); } catch (e) {}
+        try { offSound.playSound(); } catch (e) {}
+
+        const duration = this.data.fadeMs;
+        const t0 = performance.now();
+
+        const startOn  = onSound.attrValue.volume ?? 0;
+        const startOff = offSound.attrValue.volume ?? 1;
+
+        if (this._raf) cancelAnimationFrame(this._raf);
+
+        const step = () => {
+          const t = Math.min(1, (performance.now() - t0) / duration);
+          const e = t * t * (3 - 2 * t); // smoothstep
+
+          onEl.setAttribute("sound", "volume", startOn + (1 - startOn) * e);
+          offEl.setAttribute("sound", "volume", startOff * (1 - e));
+
+          if (t < 1) {
+            this._raf = requestAnimationFrame(step);
+          } else {
+            try { offSound.pauseSound(); } catch (e) {}
+          }
+        };
+
+        this._raf = requestAnimationFrame(step);
+      }
+    });
+
+    /* =========================================================
+       SON : AUTOPLAY UNLOCK (CLICK + TOUCH) + PAS DE SON EN PHASE1
+       ========================================================= */
+    const _unlockAudio = () => {
+      const phase2 = document.querySelector("#phase2");
+      const isPhase2 = phase2 && phase2.getAttribute("visible") !== false;
+
+      const f = document.querySelector("#soundFront")?.components?.sound;
+      const b = document.querySelector("#soundBack")?.components?.sound;
+
+      // Débloque WebAudio
+      try { f?.playSound(); } catch (e) {}
+      try { b?.playSound(); } catch (e) {}
+
+      // Si pas en phase2, on repause tout de suite (on garde juste l'unlock)
+      if (!isPhase2) {
+        try { f?.pauseSound(); } catch (e) {}
+        try { b?.pauseSound(); } catch (e) {}
+      }
+    };
+
+    window.addEventListener("click", _unlockAudio, { once: true });
+    window.addEventListener("touchstart", _unlockAudio, { once: true });
   </script>
+
 </head>
 
 <body>
   <a-scene>
-    <a-assets>
-      <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
-      <a-asset-item id="Porte-manteau" src="/EverydayVR/models/Coat-Rack.glb"></a-asset-item>
 
+    <!-- ASSETS -->
+    <a-assets>
       <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
       <img id="fabricRough"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Roughness.jpg">
       <img id="fabricNormal" src="/EverydayVR/models/textures/Fabric019_1K-JPG_NormalGL.jpg">
+
+      <img id="PaperColor" src="/EverydayVR/models/textures/Paper004_1K-JPG_Color.jpg">
+      <img id="PaperRough" src="/EverydayVR/models/textures/Paper004_1K-JPG_Roughness.jpg">
+      <img id="PaperNormal" src="/EverydayVR/models/textures/Paper004_1K-JPG_NormalGL.jpg">
 
       <img id="SnowColor" src="/EverydayVR/models/textures/Snow010A_1K-JPG_Color.jpg">
       <img id="SnowRough" src="/EverydayVR/models/textures/Snow010A_1K-JPG_Roughness.jpg">
@@ -259,77 +430,231 @@
       <img id="SnowDirtRough" src="/EverydayVR/models/textures/Snow012_1K-JPG_Roughness.jpg">
       <img id="SnowDirtNormal" src="/EverydayVR/models/textures/Snow012_1K-JPG_NormalGL.jpg">
 
+      <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
+      <a-asset-item id="Porte-manteau" src="/EverydayVR/models/Coat-Rack.glb"></a-asset-item>
+
+      <img id="montagne-bg" src="/images/bg-montagne.png">
       <img id="montagne-2" src="/images/montagne-2.png">
       <img id="bg-left" src="/images/bg-leftside.png">
       <img id="bg-right" src="/images/bg-rightside.png">
       <img id="bg-en-face" src="/images/bg-en-face.png">
     </a-assets>
 
-    <!-- RIG -->
-    <a-entity id="rig" position="0 1.2 4" movement-controls="speed: 0.15; fly: false">
-      <a-camera id="cam" speed="0.15">
-        <a-plane id="lidTop" position="0 1.25 -0.55" width="4" height="2.6" visible="false"
-                 material="shader: flat; color:#000; transparent:true; opacity:0;"></a-plane>
-        <a-plane id="lidBot" position="0 -1.25 -0.55" width="4" height="2.6" visible="false"
-                 material="shader: flat; color:#000; transparent:true; opacity:0;"></a-plane>
+    <!-- RIG = locomotion -->
+    <a-entity
+      id="rig"
+      position="0 1.2 4"
+      rotation="0 0 0"
+      movement-controls="speed: 0.15; fly: false"
+      turn-sound-switch="cam: #cam; front: #soundFront; back: #soundBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
+    >
 
-        <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
+      <!-- Son qui est DEVANT toi (collé à ton regard) -->
+      <a-entity
+        id="soundFront"
+        position="0 0 -3"
+        sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 0;">
+      </a-entity>
+
+      <!-- Son qui est DERRIÈRE toi -->
+      <a-entity
+        id="soundBack"
+        position="0 0 3"
+        sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
+      </a-entity>
+
+      <!-- CAMERA = tête -->
+      <a-camera id="cam" speed="0.15">
+
+        <!-- Paupière haut -->
+        <a-plane id="lidTop"
+          position="0 1.25 -0.55"
+          width="4" height="2.6"
+          visible="false"
+          material="shader: flat; color:#000; transparent:true; opacity:0;">
+        </a-plane>
+
+        <!-- Paupière bas -->
+        <a-plane id="lidBot"
+          position="0 -1.25 -0.55"
+          width="4" height="2.6"
+          visible="false"
+          material="shader: flat; color:#000; transparent:true; opacity:0;">
+        </a-plane>
+
+        <!-- PC ray (mouse) -->
+        <a-entity
+          cursor="rayOrigin: mouse"
+          raycaster="objects: .clickable">
+        </a-entity>
+
       </a-camera>
 
-      <a-entity id="leftHand" laser-controls="hand: left" raycaster="objects: .clickable"></a-entity>
-      <a-entity id="rightHand" laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
+      <!-- VR controllers + lasers (DOIVENT être dans le rig) -->
+      <a-entity
+        id="leftHand"
+        laser-controls="hand: left"
+        raycaster="objects: .clickable">
+      </a-entity>
+
+      <a-entity
+        id="rightHand"
+        laser-controls="hand: right"
+        raycaster="objects: .clickable">
+      </a-entity>
+
     </a-entity>
 
+    <!-- Lumières -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
     <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
 
-    <!-- PHASE 1 -->
+    <!-- ========= PHASE 1 ========= -->
     <a-entity id="phase1" visible="true">
       <a-sky color="#85754e"></a-sky>
 
-      <a-plane height="100" width="100" rotation="-90 0 0"
-        material="shader: standard; src: #fabricColor; roughnessMap:#fabricRough; normalMap:#fabricNormal; metalness:0; repeat:100 100;">
+      <a-plane
+        color="#9C8B61"
+        height="100"
+        width="100"
+        rotation="-90 0 0"
+        material="
+          shader: standard;
+          src: #fabricColor;
+          roughnessMap: #fabricRough;
+          normalMap: #fabricNormal;
+          metalness: 0;
+          repeat: 100 100;
+          normalScale: 1 1;
+        ">
       </a-plane>
 
-      <a-entity id="benchModel" class="clickable"
+      <!-- Banc phase1 : cliquable -->
+      <a-entity
+        id="benchModel"
+        class="clickable"
         gltf-model="#bancModel"
         position="-1.380 0 -1.500"
         scale="150 150 150"
         bench-sit-transition="
-          rig:#rig; cam:#cam; lidTop:#lidTop; lidBot:#lidBot;
-          phase1:#phase1; phase2:#phase2;
-          seat1:#seatPointPhase1; seat2:#seatPointPhase2;
-          targetYaw:180; preDelayMs:1300; closeMs:3000; blackHoldMs:1000; openMs:2000;
-          move1Ms:650; sitCamY:0.95; standCamY:1.6; standOnAnyInput:true; standMoveThreshold:0.12;">
+          rig:#rig;
+          cam:#cam;
+          lidTop:#lidTop;
+          lidBot:#lidBot;
+          phase1:#phase1;
+          phase2:#phase2;
+          seat1:#seatPointPhase1;
+          seat2:#seatPointPhase2;
+          targetYaw:180;
+          preDelayMs:1300;
+          closeMs:3000;
+          blackHoldMs:1000;
+          openMs:2000;
+          move1Ms:650;
+          sitCamY:0.95;
+          standCamY:1.6;
+          standOnAnyInput:true;
+          standMoveThreshold:0.12;
+        ">
       </a-entity>
 
-      <a-entity id="coatRack" gltf-model="#Porte-manteau" position="-1.380 0 -0.472" scale="2 2 2"></a-entity>
+      <a-entity
+        id="coatRack"
+        gltf-model="#Porte-manteau"
+        position="-1.380 0 -0.472"
+        scale="2 2 2">
+      </a-entity>
 
+      <!-- Assise phase1 -->
       <a-entity id="seatPointPhase1" position="0.448 0.90 -2"></a-entity>
     </a-entity>
 
-    <!-- PHASE 2 -->
+    <!-- ========= PHASE 2 ========= -->
     <a-entity id="phase2" visible="false">
       <a-sky color="#94CEDB"></a-sky>
 
-      <!-- ✅ SON ICI : uniquement phase2 -->
       <a-entity
-        id="soundBack"
-        position="0 1.6 3"
-        sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
+        id="benchModel_phase2"
+        gltf-model="#bancModel"
+        position="-1.380 0.15 -1.500"
+        scale="150 150 150">
       </a-entity>
 
-      <a-entity id="benchModel_phase2" gltf-model="#bancModel" position="-1.380 0.15 -1.500" scale="150 150 150"></a-entity>
-
-      <a-plane height="100" width="100" rotation="-90 0 0"
-        material="shader: standard; src: #SnowColor; roughnessMap:#SnowRough; normalMap:#SnowNormal; metalness:0; repeat:100 100;">
+      <a-plane
+        color="#FFFFFE"
+        height="100"
+        width="100"
+        rotation="-90 0 0"
+        material="
+          shader: standard;
+          src: #SnowColor;
+          roughnessMap: #SnowRough;
+          normalMap: #SnowNormal;
+          metalness: 0;
+          repeat: 100 100;
+          normalScale: 1 1;
+        ">
       </a-plane>
 
-      <a-image src="#montagne-2" position="0 16.450 -51.368" width="100" height="50"></a-image>
-      <a-image src="#bg-en-face" position="0 15.523 47.253" scale="1.04 1.04 1.04" width="100" height="50"></a-image>
-      <a-image src="#bg-left" position="-49.942 16.450 -1.698" rotation="0 90 0" width="100" height="50"></a-image>
-      <a-image src="#bg-right" position="49.942 16.450 -1.698" rotation="0 -90 0" width="100" height="50"></a-image>
+      <a-plane
+        id="sol"
+        position="0.390 0.15 -1.450"
+        rotation="-90 0 0"
+        width="5"
+        height="3"
+        material="
+          shader: standard;
 
+          src: #SnowDirtColor;
+          roughnessMap: #SnowDirtRough;
+          normalMap: #SnowDirtNormal;
+
+          metalness: 0;
+          roughness: 1;
+
+          transparent: true;
+          opacity: 1;
+          alphaMap: #solMask;
+          alphaTest: 0.3;
+
+          side: double;
+        ">
+      </a-plane>
+
+      <a-image
+        src="#montagne-2"
+        position="0 16.450 -51.368"
+        rotation="0 0 0"
+        width="100"
+        height="50">
+      </a-image>
+
+      <a-image
+        src="#bg-en-face"
+        position="0 15.523 47.253"
+        rotation="0 0 0"
+        scale="1.04 1.04 1.04"
+        width="100"
+        height="50">
+      </a-image>
+
+      <a-image
+        src="#bg-left"
+        position="-49.942 16.450 -1.698"
+        rotation="0 90 0"
+        width="100"
+        height="50">
+      </a-image>
+
+      <a-image
+        src="#bg-right"
+        position="49.942 16.450 -1.698"
+        rotation="0 -90 0"
+        width="100"
+        height="50">
+      </a-image>
+
+      <!-- Assise phase2 -->
       <a-entity id="seatPointPhase2" position="0.448 0.90 -2"></a-entity>
     </a-entity>
 
