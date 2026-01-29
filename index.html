@@ -6,64 +6,60 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-
-
   <script>
     /* =========================================================
        SON : MUTE QUAND REGARDE L'OBJET
        ========================================================= */
+    AFRAME.registerComponent("mute-when-looked", {
+      schema: {
+        camera: { type: "selector" },
+        threshold: { type: "number", default: 0.95 },
+        onVolume: { type: "number", default: 1 },
+        offVolume: { type: "number", default: 0 }
+      },
 
-AFRAME.registerComponent("mute-when-looked", {
-  schema: {
-    camera: { type: "selector" },
-    threshold: { type: "number", default: 0.95 },
-    onVolume: { type: "number", default: 1 },
-    offVolume: { type: "number", default: 0 }
-  },
+      init: function () {
+        this._isMuted = null;
+      },
 
-  init: function () {
-    this._isMuted = null; // pour éviter de remettre le volume 60 fois/sec
-  },
+      tick: function () {
+        const camEl = this.data.camera;
+        if (!camEl) return;
 
-  tick: function () {
-    const camEl = this.data.camera;
-    if (!camEl) return;
+        const soundComp = this.el.components.sound;
+        if (!soundComp) return;
 
-    const soundComp = this.el.components.sound;
-    if (!soundComp) return;
+        const cam = camEl.object3D;
+        const obj = this.el.object3D;
 
-    const cam = camEl.object3D;
-    const obj = this.el.object3D;
+        const camDir = new THREE.Vector3();
+        cam.getWorldDirection(camDir);
 
-    const camDir = new THREE.Vector3();
-    cam.getWorldDirection(camDir);
+        const camPos = new THREE.Vector3();
+        cam.getWorldPosition(camPos);
 
-    const camPos = new THREE.Vector3();
-    cam.getWorldPosition(camPos);
+        const objPos = new THREE.Vector3();
+        obj.getWorldPosition(objPos);
 
-    const objPos = new THREE.Vector3();
-    obj.getWorldPosition(objPos);
+        const toObj = objPos.sub(camPos).normalize();
+        const dot = camDir.dot(toObj);
 
-    const toObj = objPos.sub(camPos).normalize();
-    const dot = camDir.dot(toObj);
+        const shouldMute = dot > this.data.threshold;
 
-    const shouldMute = dot > this.data.threshold;
+        if (this._isMuted === shouldMute) return;
+        this._isMuted = shouldMute;
 
-    // seulement si ça change (évite le spam)
-    if (this._isMuted === shouldMute) return;
-    this._isMuted = shouldMute;
+        this.el.setAttribute(
+          "sound",
+          "volume",
+          shouldMute ? this.data.offVolume : this.data.onVolume
+        );
+      }
+    });
 
-    this.el.setAttribute(
-      "sound",
-      "volume",
-      shouldMute ? this.data.offVolume : this.data.onVolume
-    );
-  }
-});
-
-
-
-
+    /* =========================================================
+       TRANSITION BANC + PAUPIERES
+       ========================================================= */
     AFRAME.registerComponent("bench-sit-transition", {
       schema: {
         rig:   { type: "selector" },
@@ -78,26 +74,21 @@ AFRAME.registerComponent("mute-when-looked", {
         seat1: { type: "selector" }, // assise phase1
         seat2: { type: "selector" }, // assise phase2 (spawn assis)
 
-        // Orientation
         targetYaw: { type: "number", default: 180 },
         rotateMs:  { type: "number", default: 700 },
 
-        // Timing demandé
-        preDelayMs:   { type: "number", default: 1300 }, // 1-2s avant noir
-        closeMs:      { type: "number", default: 3000 }, // fermeture / fondu noir 3s
-        blackHoldMs:  { type: "number", default: 1000 }, // noir maintenu 1s
-        openMs:       { type: "number", default: 2000 }, // ouverture 2s
+        preDelayMs:   { type: "number", default: 1300 },
+        closeMs:      { type: "number", default: 3000 },
+        blackHoldMs:  { type: "number", default: 1000 },
+        openMs:       { type: "number", default: 2000 },
 
-        // Mouvement vers le banc phase1
         move1Ms: { type: "number", default: 650 },
 
-        // Assis / debout
         standCamY: { type: "number", default: 1.6 },
-        sitCamY:   { type: "number", default: 0.95 }, // assis plus bas
+        sitCamY:   { type: "number", default: 0.95 },
 
-        // Se lever
         standOnAnyInput: { type: "boolean", default: true },
-        standMoveThreshold: { type: "number", default: 0.12 } // mouvement VR
+        standMoveThreshold: { type: "number", default: 0.12 }
       },
 
       init() {
@@ -107,17 +98,14 @@ AFRAME.registerComponent("mute-when-looked", {
         this._camWorld = new THREE.Vector3();
         this._camWorldPrev = new THREE.Vector3();
 
-        // === AJOUT: éviter que movement-controls annule la téléportation / anim ===
         this._savedMoveControls = null;
         this._moveWasRemoved = false;
-        // =======================================================================
 
         this.onClick = () => this.run();
         this.el.addEventListener("click", this.onClick);
 
         this._tickStand = this._tickStand.bind(this);
 
-        // ZQSD + flèches + espace
         this._onKeyDown = (e) => {
           if (!this._isSitting) return;
           if (!this.data.standOnAnyInput) return;
@@ -139,10 +127,8 @@ AFRAME.registerComponent("mute-when-looked", {
 
       resetLidsInstant() {
         const { lidTop, lidBot } = this.data;
-        // Position "ouverte" (hors écran)
         lidTop.setAttribute("position", "0 1.25 -0.55");
         lidBot.setAttribute("position", "0 -1.25 -0.55");
-        // Opacité à 0 (invisible)
         lidTop.setAttribute("material", "opacity", 0);
         lidBot.setAttribute("material", "opacity", 0);
         lidTop.setAttribute("visible", false);
@@ -158,15 +144,12 @@ AFRAME.registerComponent("mute-when-looked", {
 
         this.resetLidsInstant();
 
-        // === AJOUT: couper movement-controls pendant la téléport/anim (sinon ça peut annuler) ===
         this._savedMoveControls = rig.getAttribute("movement-controls");
         if (this._savedMoveControls) {
           rig.removeAttribute("movement-controls");
           this._moveWasRemoved = true;
         }
-        // ====================================================================================
 
-        // 1) rotation vers le sens du banc
         rig.setAttribute("animation__turn", {
           property: "rotation",
           to: `0 ${d.targetYaw} 0`,
@@ -174,7 +157,6 @@ AFRAME.registerComponent("mute-when-looked", {
           easing: "easeOutCubic"
         });
 
-        // 2) move vers assise phase1 (mieux sur le banc)
         const p1 = seat1.getAttribute("position");
         rig.setAttribute("animation__approach", {
           property: "position",
@@ -186,15 +168,12 @@ AFRAME.registerComponent("mute-when-looked", {
         const t0 = Math.max(d.rotateMs, d.move1Ms) + d.preDelayMs;
 
         setTimeout(() => {
-          // 3) Fermeture "œil" + fondu noir (opacity monte)
           lidTop.setAttribute("visible", true);
           lidBot.setAttribute("visible", true);
 
-          // Assurer que c'est "flat" pour un noir propre en VR
           lidTop.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
           lidBot.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
 
-          // Animation position (paupières qui se ferment)
           lidTop.setAttribute("animation__closePos", {
             property: "position",
             to: "0 0.55 -0.55",
@@ -208,7 +187,6 @@ AFRAME.registerComponent("mute-when-looked", {
             easing: "easeInOutQuad"
           });
 
-          // Animation opacity (fondu noir smooth)
           lidTop.setAttribute("animation__closeOp", {
             property: "material.opacity",
             to: 1,
@@ -222,24 +200,19 @@ AFRAME.registerComponent("mute-when-looked", {
             easing: "easeInOutQuad"
           });
 
-          // 4) Après fermeture (3s) + noir maintenu (1s)
           setTimeout(() => {
             setTimeout(() => {
-              // Switch phase + spawn assis phase2
               phase1.setAttribute("visible", false);
               phase2.setAttribute("visible", true);
 
               const p2 = seat2.getAttribute("position");
               rig.setAttribute("position", `${p2.x} ${p2.y} ${p2.z}`);
 
-              // caméra assise (bas)
               cam.setAttribute("position", `0 ${d.sitCamY} 0`);
               this._isSitting = true;
 
-              // init mouvement VR
               cam.object3D.getWorldPosition(this._camWorldPrev);
 
-              // 5) Ouverture (2s)
               lidTop.setAttribute("animation__openPos", {
                 property: "position",
                 to: "0 1.25 -0.55",
@@ -253,7 +226,6 @@ AFRAME.registerComponent("mute-when-looked", {
                 easing: "easeOutQuad"
               });
 
-              // Opacité qui redescend pendant l'ouverture (smooth)
               lidTop.setAttribute("animation__openOp", {
                 property: "material.opacity",
                 to: 0,
@@ -267,20 +239,16 @@ AFRAME.registerComponent("mute-when-looked", {
                 easing: "easeOutQuad"
               });
 
-              // Cleanup
               setTimeout(() => {
                 lidTop.setAttribute("visible", false);
                 lidBot.setAttribute("visible", false);
                 this._running = false;
 
-                // === AJOUT: remettre movement-controls après la transition ===
                 if (this._moveWasRemoved) {
                   rig.setAttribute("movement-controls", this._savedMoveControls);
                   this._moveWasRemoved = false;
                 }
-                // ==========================================================
 
-                // activer lever sur mouvement
                 this.el.sceneEl.addEventListener("tick", this._tickStand);
               }, d.openMs + 80);
 
@@ -330,11 +298,8 @@ AFRAME.registerComponent("mute-when-looked", {
         cam: { type: "selector" },
         front: { type: "selector" },
         back: { type: "selector" },
-
-        // ✅ active uniquement si cette scène est visible
         scene: { type: "selector" },
-
-        threshold: { type: "number", default: 0.35 }, // ~70°
+        threshold: { type: "number", default: 0.35 },
         fadeMs: { type: "number", default: 450 }
       },
 
@@ -362,7 +327,6 @@ AFRAME.registerComponent("mute-when-looked", {
         const frontSound = frontEl.components.sound;
         const backSound = backEl.components.sound;
 
-        // ✅ Phase2 only
         const phaseVisible = !sceneEl || sceneEl.getAttribute("visible") !== false;
 
         if (!phaseVisible) {
@@ -375,7 +339,6 @@ AFRAME.registerComponent("mute-when-looked", {
           return;
         }
 
-        // ✅ entrée en phase2 : force start (si audio déverrouillé)
         if (!this._phaseWasVisible) {
           try { frontSound?.playSound(); } catch (e) {}
           try { backSound?.playSound(); } catch (e) {}
@@ -384,16 +347,14 @@ AFRAME.registerComponent("mute-when-looked", {
 
         const camObj = camEl.object3D;
 
-        // forward caméra
         camObj.getWorldQuaternion(this._q);
         this._forward.set(0, 0, -1).applyQuaternion(this._q).normalize();
 
-        // vecteur caméra -> front
         this._camPos.setFromMatrixPosition(camObj.matrixWorld);
         this._frontPos.setFromMatrixPosition(frontEl.object3D.matrixWorld);
         this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
 
-        const dot = this._forward.dot(this._toFront); // 1 = regarde front ; -1 = tourne dos
+        const dot = this._forward.dot(this._toFront);
 
         const next = (dot >= this.data.threshold) ? "front" : "back";
         if (next !== this.state) {
@@ -423,7 +384,7 @@ AFRAME.registerComponent("mute-when-looked", {
 
         const step = () => {
           const t = Math.min(1, (performance.now() - t0) / duration);
-          const e = t * t * (3 - 2 * t); // smoothstep
+          const e = t * t * (3 - 2 * t);
 
           onEl.setAttribute("sound", "volume", startOn + (1 - startOn) * e);
           offEl.setAttribute("sound", "volume", startOff * (1 - e));
@@ -432,6 +393,128 @@ AFRAME.registerComponent("mute-when-looked", {
             this._raf = requestAnimationFrame(step);
           } else {
             try { offSound.pauseSound(); } catch (e) {}
+          }
+        };
+
+        this._raf = requestAnimationFrame(step);
+      }
+    });
+
+    /* =========================================================
+       IMAGES : SWITCH DEVANT/DERRIÈRE (ACTIF UNIQUEMENT PHASE2)
+       -> FRONT = #montagne-bg-2 (passe "devant")
+       -> BACK  = #montagne-2
+       ========================================================= */
+    AFRAME.registerComponent("turn-image-switch", {
+      schema: {
+        cam: { type: "selector" },
+        front: { type: "selector" },
+        back: { type: "selector" },
+        scene: { type: "selector" },
+        threshold: { type: "number", default: 0.35 },
+        fadeMs: { type: "number", default: 450 }
+      },
+
+      init() {
+        this.state = null;
+        this._raf = null;
+
+        this._q = new THREE.Quaternion();
+        this._forward = new THREE.Vector3();
+        this._toFront = new THREE.Vector3();
+        this._camPos = new THREE.Vector3();
+        this._frontPos = new THREE.Vector3();
+
+        this._phaseWasVisible = false;
+
+        const ensureFade = (el) => {
+          if (!el) return;
+          el.setAttribute("material", "transparent", true);
+          if (el.getAttribute("material")?.opacity == null) {
+            el.setAttribute("material", "opacity", 1);
+          }
+        };
+
+        ensureFade(this.data.front);
+        ensureFade(this.data.back);
+      },
+
+      tick() {
+        const sceneEl = this.data.scene;
+
+        const camEl = this.data.cam;
+        const frontEl = this.data.front;
+        const backEl = this.data.back;
+        if (!camEl || !frontEl || !backEl) return;
+
+        const phaseVisible = !sceneEl || sceneEl.getAttribute("visible") !== false;
+
+        if (!phaseVisible) {
+          if (this._phaseWasVisible) {
+            frontEl.setAttribute("visible", false);
+            backEl.setAttribute("visible", false);
+            this.state = null;
+          }
+          this._phaseWasVisible = false;
+          return;
+        }
+
+        if (!this._phaseWasVisible) {
+          // on entre en phase2 : on affiche front par défaut
+          frontEl.setAttribute("visible", true);
+          backEl.setAttribute("visible", true);
+          frontEl.setAttribute("material", "opacity", 1);
+          backEl.setAttribute("material", "opacity", 0);
+          backEl.setAttribute("visible", false);
+          this.state = "front";
+          this._phaseWasVisible = true;
+          return;
+        }
+
+        const camObj = camEl.object3D;
+
+        camObj.getWorldQuaternion(this._q);
+        this._forward.set(0, 0, -1).applyQuaternion(this._q).normalize();
+
+        this._camPos.setFromMatrixPosition(camObj.matrixWorld);
+        this._frontPos.setFromMatrixPosition(frontEl.object3D.matrixWorld);
+        this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
+
+        const dot = this._forward.dot(this._toFront);
+
+        const next = (dot >= this.data.threshold) ? "front" : "back";
+        if (next !== this.state) {
+          this.state = next;
+          this._crossfade(
+            next === "front" ? frontEl : backEl,
+            next === "front" ? backEl : frontEl
+          );
+        }
+      },
+
+      _crossfade(onEl, offEl) {
+        const duration = this.data.fadeMs;
+        const t0 = performance.now();
+
+        onEl.setAttribute("visible", true);
+        offEl.setAttribute("visible", true);
+
+        const startOn  = (onEl.getAttribute("material")?.opacity ?? 0);
+        const startOff = (offEl.getAttribute("material")?.opacity ?? 1);
+
+        if (this._raf) cancelAnimationFrame(this._raf);
+
+        const step = () => {
+          const t = Math.min(1, (performance.now() - t0) / duration);
+          const e = t * t * (3 - 2 * t);
+
+          onEl.setAttribute("material", "opacity", startOn + (1 - startOn) * e);
+          offEl.setAttribute("material", "opacity", startOff * (1 - e));
+
+          if (t < 1) {
+            this._raf = requestAnimationFrame(step);
+          } else {
+            offEl.setAttribute("visible", false);
           }
         };
 
@@ -449,11 +532,9 @@ AFRAME.registerComponent("mute-when-looked", {
       const f = document.querySelector("#soundFront")?.components?.sound;
       const b = document.querySelector("#soundBack")?.components?.sound;
 
-      // Débloque WebAudio
       try { f?.playSound(); } catch (e) {}
       try { b?.playSound(); } catch (e) {}
 
-      // Si pas en phase2, on repause tout de suite (on garde juste l'unlock)
       if (!isPhase2) {
         try { f?.pauseSound(); } catch (e) {}
         try { b?.pauseSound(); } catch (e) {}
@@ -463,7 +544,6 @@ AFRAME.registerComponent("mute-when-looked", {
     window.addEventListener("click", _unlockAudio, { once: true });
     window.addEventListener("touchstart", _unlockAudio, { once: true });
   </script>
-
 </head>
 
 <body>
@@ -506,27 +586,26 @@ AFRAME.registerComponent("mute-when-looked", {
       rotation="0 0 0"
       movement-controls="speed: 0.15; fly: false; constrainToNavMesh: true"
       turn-sound-switch="cam: #cam; front: #soundFront; back: #soundBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
+      turn-image-switch="cam: #cam; front: #imgFront; back: #imgBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
     >
-    <!-- CAMERA = tête -->
+      <!-- CAMERA = tête -->
       <a-camera id="cam" speed="0.15">
 
-      <!-- Son qui est DEVANT toi (collé à ton regard) -->
-      <a-entity
-  id="soundFront"
-  position="0 0 -3"
-  sound="src: url(sons/voices-murmur.mp3); autoplay: true; loop: true; positional: true; volume: 1;"
-  mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 1; offVolume: 0">
-</a-entity>
+        <!-- Son DEVANT -->
+        <a-entity
+          id="soundFront"
+          position="0 0 -3"
+          sound="src: url(sons/voices-murmur.mp3); autoplay: true; loop: true; positional: true; volume: 1;"
+          mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 1; offVolume: 0">
+        </a-entity>
 
-      <!-- Son qui est DERRIÈRE toi -->
-      <a-entity
-  id="soundBack"
-  position="0 0 3"
-  sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;"
-  mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 1; offVolume: 0">
-</a-entity>
-
-      
+        <!-- Son DERRIERE -->
+        <a-entity
+          id="soundBack"
+          position="0 0 3"
+          sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;"
+          mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 1; offVolume: 0">
+        </a-entity>
 
         <!-- Paupière haut -->
         <a-plane id="lidTop"
@@ -552,7 +631,7 @@ AFRAME.registerComponent("mute-when-looked", {
 
       </a-camera>
 
-      <!-- VR controllers + lasers (DOIVENT être dans le rig) -->
+      <!-- VR controllers + lasers -->
       <a-entity
         id="leftHand"
         laser-controls="hand: left"
@@ -580,9 +659,8 @@ AFRAME.registerComponent("mute-when-looked", {
         position="-1 0.1 0"
         nav-mesh
         visible="true"
-  material="wireframe: true; color: red">
+        material="wireframe: true; color: red">
       </a-entity>
-      
 
       <a-plane
         color="#9C8B61"
@@ -692,24 +770,33 @@ AFRAME.registerComponent("mute-when-looked", {
         ">
       </a-plane>
 
+      <!-- IMPORTANT :
+           FRONT = #montagne-bg-2 (passe devant)
+           BACK  = #montagne-2
+           Les 2 sont superposées au même endroit, et ça fade selon ton regard.
+      -->
       <a-image
+        id="imgBack"
         src="#montagne-2"
         position="0 16.450 -51.368"
         rotation="0 0 0"
         width="100"
-        height="50">
+        height="50"
+        material="transparent:true; opacity:0"
+        visible="false">
       </a-image>
 
       <a-image
+        id="imgFront"
         src="#montagne-bg-2"
         position="0 16.450 -51.368"
         rotation="0 0 0"
         width="100"
-        height="50">
+        height="50"
+        material="transparent:true; opacity:1"
+        visible="true">
       </a-image>
 
-
-      
       <a-image
         src="#bg-en-face"
         position="0 15.523 47.253"
