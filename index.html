@@ -282,24 +282,22 @@
          => sans conflit, car tout est géré ici.
       3) Actif uniquement en phase2
     ========================================================= */
-    AFRAME.registerComponent("turn-sound-switch", {
+   AFRAME.registerComponent("turn-sound-switch", {
   schema: {
     cam:   { type: "selector" },
     front: { type: "selector" },
     back:  { type: "selector" },
     scene: { type: "selector" },
 
-    // Switch / zone : si dotFront > threshold => plutôt FRONT, sinon plutôt BACK
+    // Mix front/back
     threshold: { type: "number", default: 0.35 },
+    smooth: { type: "number", default: 0.14 },
 
-    // Vitesse du fondu (plus petit = plus réactif)
-    smooth: { type: "number", default: 0.12 }, // 0.08-0.2 en général
+    // ✅ MUTE HARD (vraiment coupé)
+    lookMuteThreshold: { type: "number", default: 0.65 }, // LARGE zone (0.6-0.75)
+    lookMuteHard: { type: "boolean", default: true },
 
-    // ✅ Mute quand tu regardes pile l'émetteur actif
-    lookMuteThreshold: { type: "number", default: 0.95 }, // 0.98 strict / 0.90 facile
-    lookMuteStrength:  { type: "number", default: 1.0 },  // 1 = mute total, 0.7 = baisse forte mais pas 0
-
-    // Volumes de base
+    // Volumes normaux
     frontBaseVol: { type: "number", default: 0.8 },
     backBaseVol:  { type: "number", default: 1.0 }
   },
@@ -317,14 +315,12 @@
 
     this._phaseWasVisible = false;
 
-    // volumes courants (pour le smoothing)
-    this._vFront = this.data.frontBaseVol;
-    this._vBack  = 0; // au départ on peut démarrer sur front ou back, on s'en fout
+    this._vFront = 0;
+    this._vBack  = 0;
   },
 
   tick(time, dt) {
     const sceneEl = this.data.scene;
-
     const camEl = this.data.cam;
     const frontEl = this.data.front;
     const backEl = this.data.back;
@@ -333,19 +329,19 @@
     const frontSound = frontEl.components.sound;
     const backSound  = backEl.components.sound;
 
-    // Phase2 only
     const phaseVisible = !sceneEl || sceneEl.getAttribute("visible") !== false;
 
     if (!phaseVisible) {
       if (this._phaseWasVisible) {
         try { frontSound?.pauseSound(); } catch (e) {}
         try { backSound?.pauseSound(); } catch (e) {}
+        frontEl.setAttribute("sound", "volume", 0);
+        backEl.setAttribute("sound", "volume", 0);
       }
       this._phaseWasVisible = false;
       return;
     }
 
-    // Entrée en phase2 : on play pour être sûr que ça tourne
     if (!this._phaseWasVisible) {
       try { frontSound?.playSound(); } catch (e) {}
       try { backSound?.playSound(); } catch (e) {}
@@ -354,7 +350,7 @@
 
     const camObj = camEl.object3D;
 
-    // direction du regard
+    // direction regard
     camObj.getWorldQuaternion(this._q);
     this._forward.set(0, 0, -1).applyQuaternion(this._q).normalize();
 
@@ -363,53 +359,48 @@
     this._frontPos.setFromMatrixPosition(frontEl.object3D.matrixWorld);
     this._backPos.setFromMatrixPosition(backEl.object3D.matrixWorld);
 
-    // vecteurs caméra -> sons
+    // vecteurs cam->front/back
     this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
     this._toBack.copy(this._backPos).sub(this._camPos).normalize();
 
-    const dotFront = this._forward.dot(this._toFront); // 1 = tu regardes front
-    const dotBack  = this._forward.dot(this._toBack);  // 1 = tu regardes back
+    const dotFront = this._forward.dot(this._toFront);
+    const dotBack  = this._forward.dot(this._toBack);
 
-    // ===== 1) Mix front/back (sans raf crossfade, donc stable) =====
-    // On fabrique un poids "frontWeight" entre 0 et 1 à partir de dotFront
-    // threshold ~0.35: au-dessus => plutôt front
-    // On mappe autour du threshold pour avoir un changement progressif.
-    const band = 0.25; // largeur de transition (plus grand = plus progressif)
-    const frontWeight = THREE.MathUtils.clamp((dotFront - (this.data.threshold - band)) / (2 * band), 0, 1);
-    const backWeight  = 1 - frontWeight;
+    // --- MIX front/back (progressif) ---
+    const band = 0.30; // plus grand = transition plus douce
+    const frontWeight = THREE.MathUtils.clamp(
+      (dotFront - (this.data.threshold - band)) / (2 * band),
+      0, 1
+    );
+    const backWeight = 1 - frontWeight;
 
-    // volumes cible (avant look-mute)
     let targetFront = this.data.frontBaseVol * frontWeight;
     let targetBack  = this.data.backBaseVol  * backWeight;
 
-    // ===== 2) Look-mute sur l'émetteur "actif" (celui qui est le plus fort) =====
+    // --- MUTE HARD sur l’émetteur "actif" (celui le plus présent) ---
     const activeIsFront = frontWeight >= 0.5;
     const activeDot = activeIsFront ? dotFront : dotBack;
 
     if (activeDot >= this.data.lookMuteThreshold) {
-      // facteur 0..1 : plus tu es "pile", plus ça mute
-      const t = THREE.MathUtils.clamp(
-        (activeDot - this.data.lookMuteThreshold) / (1 - this.data.lookMuteThreshold),
-        0, 1
-      );
-      const muteFactor = 1 - (t * this.data.lookMuteStrength); // 1 -> pas mute, 0 -> mute
-      if (activeIsFront) targetFront *= muteFactor;
-      else targetBack *= muteFactor;
+      if (this.data.lookMuteHard) {
+        if (activeIsFront) targetFront = 0;
+        else targetBack = 0;
+      }
     }
 
-    // ===== 3) Smoothing =====
-    // dt en ms -> on convertit en "alpha" stable
-    const alpha = 1 - Math.pow(1 - this.data.smooth, Math.min(60, dt / 16.67)); // stable 60fps
-
+    // --- smoothing (évite les "clacs") ---
+    const alpha = 1 - Math.pow(1 - this.data.smooth, Math.min(60, (dt || 16.67) / 16.67));
     this._vFront = this._vFront + (targetFront - this._vFront) * alpha;
     this._vBack  = this._vBack  + (targetBack  - this._vBack)  * alpha;
 
-    // ===== 4) Apply =====
+    // clamp sécurité
+    if (this._vFront < 0.0005) this._vFront = 0;
+    if (this._vBack  < 0.0005) this._vBack  = 0;
+
     frontEl.setAttribute("sound", "volume", this._vFront);
     backEl.setAttribute("sound", "volume", this._vBack);
   }
 });
-
 
     /* =========================================================
       COMPONENT : turn-image-switch
@@ -556,7 +547,7 @@
 </head>
 
 <body>
-  <a-scene fog="type: exponential; color: #000000; density: 0.0025;">
+  <a-scene fog="type: Exponential; color: #000000; density: 0.0025;">
 
     <!-- ===========================
       ASSETS
@@ -600,7 +591,21 @@
       position="0 1.2 4"
       rotation="0 0 0"
       movement-controls="speed: 0.15; fly: false; constrainToNavMesh: true"
-      turn-sound-switch="cam: #cam; front: #soundFront; back: #soundBack; scene: #phase2; threshold: 0.35; fadeMs: 450; lookMuteThreshold: 0.90; lookMuteFadeMs: 120; frontBaseVol: 0.8; backBaseVol: 1.0"
+      turn-sound-switch="
+          cam: #cam;
+          front: #soundFront;
+          back: #soundBack;
+          scene: #phase2;
+
+          threshold: 0.35;
+          smooth: 0.14;
+
+          lookMuteThreshold: 0.65;
+          lookMuteHard: true;
+
+          frontBaseVol: 0.8;
+          backBaseVol: 1.0;"
+
       turn-image-switch="cam: #cam; front: #imgFront; back: #imgBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
     >
 
