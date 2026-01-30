@@ -547,7 +547,10 @@
 </head>
 
 <body>
-  <a-scene>
+  <a-scene fog="type: linear; color: #AAA"
+           renderer="antialias: true; colorManagement: true"
+           vr-mode-ui="enabled: true"
+           loading-screen="enabled: true">
 
     <!-- ASSETS -->
     <a-assets>
@@ -596,7 +599,7 @@
           id="soundFront"
           position="0 0 -3"
           sound="src: url(sons/voices-murmur.mp3); autoplay: true; loop: true; positional: true; volume: 1;"
-          mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 0.9; offVolume: 0">
+          mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 0.8; offVolume: 0">
         </a-entity>
 
         <!-- Son DERRIERE -->
@@ -653,14 +656,6 @@
     <!-- ========= PHASE 1 ========= -->
     <a-entity id="phase1" visible="true">
       <a-sky color="#85754e"></a-sky>
-
-      <a-entity
-        gltf-model="#navmesh"
-        position="-1 0.1 0"
-        nav-mesh
-        visible="true"
-        material="wireframe: true; color: red">
-      </a-entity>
 
       <a-plane
         color="#9C8B61"
