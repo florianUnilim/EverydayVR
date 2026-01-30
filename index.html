@@ -7,523 +7,523 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
 <script>
-/* =========================================================
-  bench-sit-transition (VR SAFE)
-========================================================= */
-AFRAME.registerComponent("bench-sit-transition", {
-  schema: {
-    rig:   { type: "selector" },
-    cam:   { type: "selector" },
+  /* =========================================================
+    ✅ SCRIPT COMPLET (PC + VR) — corrigé SANS casser ton projet
+    ---------------------------------------------------------
+    MODIFS FAITES :
+    1) turn-sound-switch : VR SAFE + anti-spam (ne crossfade que si cible change)
+    2) Audio unlock : relancé aussi au moment "enter-vr"
+    3) IMPORTANT côté HTML (dans <body>) :
+       -> les sons #soundFront / #soundBack doivent être HORS du rig
+       -> (je te donne la version complète du <body> plus bas)
+  ========================================================= */
 
-    lidTop: { type: "selector" },
-    lidBot: { type: "selector" },
+  /* =========================================================
+    COMPONENT : bench-sit-transition (VR SAFE)
+  ========================================================= */
+  AFRAME.registerComponent("bench-sit-transition", {
+    schema: {
+      rig:   { type: "selector" },
+      cam:   { type: "selector" },
 
-    phase1:{ type: "selector" },
-    phase2:{ type: "selector" },
+      lidTop: { type: "selector" },
+      lidBot: { type: "selector" },
 
-    seat1: { type: "selector" },
-    seat2: { type: "selector" },
+      phase1:{ type: "selector" },
+      phase2:{ type: "selector" },
 
-    targetYaw: { type: "number", default: 180 },
-    rotateMs:  { type: "number", default: 700 },
+      seat1: { type: "selector" },
+      seat2: { type: "selector" },
 
-    preDelayMs:   { type: "number", default: 1300 },
-    closeMs:      { type: "number", default: 3000 },
-    blackHoldMs:  { type: "number", default: 1000 },
-    openMs:       { type: "number", default: 2000 },
+      targetYaw: { type: "number", default: 180 },
+      rotateMs:  { type: "number", default: 700 },
 
-    move1Ms: { type: "number", default: 650 },
+      preDelayMs:   { type: "number", default: 1300 },
+      closeMs:      { type: "number", default: 3000 },
+      blackHoldMs:  { type: "number", default: 1000 },
+      openMs:       { type: "number", default: 2000 },
 
-    standCamY: { type: "number", default: 1.6 },
-    sitCamY:   { type: "number", default: 0.95 },
+      move1Ms: { type: "number", default: 650 },
 
-    standOnAnyInput: { type: "boolean", default: true },
-    standMoveThreshold: { type: "number", default: 0.12 }
-  },
+      standCamY: { type: "number", default: 1.6 },
+      sitCamY:   { type: "number", default: 0.95 },
 
-  init() {
-    this._running = false;
-    this._isSitting = false;
+      standOnAnyInput: { type: "boolean", default: true },
+      standMoveThreshold: { type: "number", default: 0.12 }
+    },
 
-    this._headWorld = new THREE.Vector3();
-    this._headWorldPrev = new THREE.Vector3();
+    init() {
+      this._running = false;
+      this._isSitting = false;
 
-    this._savedMoveControls = null;
-    this._moveWasRemoved = false;
+      this._headWorld = new THREE.Vector3();
+      this._headWorldPrev = new THREE.Vector3();
 
-    this.onClick = () => this.run();
-    this.el.addEventListener("click", this.onClick);
+      this._savedMoveControls = null;
+      this._moveWasRemoved = false;
 
-    this._tickStand = this._tickStand.bind(this);
+      this.onClick = () => this.run();
+      this.el.addEventListener("click", this.onClick);
 
-    this._onKeyDown = (e) => {
-      if (!this._isSitting) return;
-      if (!this.data.standOnAnyInput) return;
-      const k = (e.key || "").toLowerCase();
-      if (["z","q","s","d","arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) {
-        this.standUp();
+      this._tickStand = this._tickStand.bind(this);
+
+      this._onKeyDown = (e) => {
+        if (!this._isSitting) return;
+        if (!this.data.standOnAnyInput) return;
+        const k = (e.key || "").toLowerCase();
+        if (["z","q","s","d","arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) {
+          this.standUp();
+        }
+      };
+      window.addEventListener("keydown", this._onKeyDown);
+
+      this.resetLidsInstant();
+    },
+
+    remove() {
+      this.el.removeEventListener("click", this.onClick);
+      window.removeEventListener("keydown", this._onKeyDown);
+      this.el.sceneEl.removeEventListener("tick", this._tickStand);
+    },
+
+    resetLidsInstant() {
+      const { lidTop, lidBot } = this.data;
+      lidTop.setAttribute("position", "0 1.25 -0.55");
+      lidBot.setAttribute("position", "0 -1.25 -0.55");
+      lidTop.setAttribute("material", "opacity", 0);
+      lidBot.setAttribute("material", "opacity", 0);
+      lidTop.setAttribute("visible", false);
+      lidBot.setAttribute("visible", false);
+    },
+
+    run() {
+      const d = this.data;
+      const { rig, cam, lidTop, lidBot, phase1, phase2, seat1, seat2 } = d;
+      if (!rig || !cam || !lidTop || !lidBot || !phase1 || !phase2 || !seat1 || !seat2) return;
+      if (this._running) return;
+      this._running = true;
+
+      this.resetLidsInstant();
+
+      // Désactive movement-controls pendant anim (sinon ça fight)
+      this._savedMoveControls = rig.getAttribute("movement-controls");
+      if (this._savedMoveControls) {
+        rig.removeAttribute("movement-controls");
+        this._moveWasRemoved = true;
       }
-    };
-    window.addEventListener("keydown", this._onKeyDown);
 
-    this.resetLidsInstant();
-  },
+      // Tourner vers le banc
+      rig.setAttribute("animation__turn", {
+        property: "rotation",
+        to: `0 ${d.targetYaw} 0`,
+        dur: d.rotateMs,
+        easing: "easeOutCubic"
+      });
 
-  remove() {
-    this.el.removeEventListener("click", this.onClick);
-    window.removeEventListener("keydown", this._onKeyDown);
-    this.el.sceneEl.removeEventListener("tick", this._tickStand);
-  },
-
-  resetLidsInstant() {
-    const { lidTop, lidBot } = this.data;
-    lidTop.setAttribute("position", "0 1.25 -0.55");
-    lidBot.setAttribute("position", "0 -1.25 -0.55");
-    lidTop.setAttribute("material", "opacity", 0);
-    lidBot.setAttribute("material", "opacity", 0);
-    lidTop.setAttribute("visible", false);
-    lidBot.setAttribute("visible", false);
-  },
-
-  run() {
-    const d = this.data;
-    const { rig, cam, lidTop, lidBot, phase1, phase2, seat1, seat2 } = d;
-    if (!rig || !cam || !lidTop || !lidBot || !phase1 || !phase2 || !seat1 || !seat2) return;
-    if (this._running) return;
-    this._running = true;
-
-    this.resetLidsInstant();
-
-    // Désactive movement-controls pendant anim (sinon ça fight)
-    this._savedMoveControls = rig.getAttribute("movement-controls");
-    if (this._savedMoveControls) {
-      rig.removeAttribute("movement-controls");
-      this._moveWasRemoved = true;
-    }
-
-    // Tourner vers banc
-    rig.setAttribute("animation__turn", {
-      property: "rotation",
-      to: `0 ${d.targetYaw} 0`,
-      dur: d.rotateMs,
-      easing: "easeOutCubic"
-    });
-
-    // Approche
-    const p1 = seat1.getAttribute("position");
-    rig.setAttribute("animation__approach", {
-      property: "position",
-      to: `${p1.x} ${p1.y} ${p1.z}`,
-      dur: d.move1Ms,
-      easing: "easeOutCubic"
-    });
-
-    const t0 = Math.max(d.rotateMs, d.move1Ms) + d.preDelayMs;
-
-    setTimeout(() => {
-      // Fermeture
-      lidTop.setAttribute("visible", true);
-      lidBot.setAttribute("visible", true);
-      lidTop.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
-      lidBot.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
-
-      lidTop.setAttribute("animation__closePos", {
+      // Approche
+      const p1 = seat1.getAttribute("position");
+      rig.setAttribute("animation__approach", {
         property: "position",
-        to: "0 0.55 -0.55",
-        dur: d.closeMs,
-        easing: "easeInOutQuad"
-      });
-      lidBot.setAttribute("animation__closePos", {
-        property: "position",
-        to: "0 -0.55 -0.55",
-        dur: d.closeMs,
-        easing: "easeInOutQuad"
+        to: `${p1.x} ${p1.y} ${p1.z}`,
+        dur: d.move1Ms,
+        easing: "easeOutCubic"
       });
 
-      lidTop.setAttribute("animation__closeOp", {
-        property: "material.opacity",
-        to: 1,
-        dur: d.closeMs,
-        easing: "easeInOutQuad"
-      });
-      lidBot.setAttribute("animation__closeOp", {
-        property: "material.opacity",
-        to: 1,
-        dur: d.closeMs,
-        easing: "easeInOutQuad"
-      });
+      const t0 = Math.max(d.rotateMs, d.move1Ms) + d.preDelayMs;
 
       setTimeout(() => {
+        // Fermeture
+        lidTop.setAttribute("visible", true);
+        lidBot.setAttribute("visible", true);
+        lidTop.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
+        lidBot.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
+
+        lidTop.setAttribute("animation__closePos", {
+          property: "position",
+          to: "0 0.55 -0.55",
+          dur: d.closeMs,
+          easing: "easeInOutQuad"
+        });
+        lidBot.setAttribute("animation__closePos", {
+          property: "position",
+          to: "0 -0.55 -0.55",
+          dur: d.closeMs,
+          easing: "easeInOutQuad"
+        });
+
+        lidTop.setAttribute("animation__closeOp", {
+          property: "material.opacity",
+          to: 1,
+          dur: d.closeMs,
+          easing: "easeInOutQuad"
+        });
+        lidBot.setAttribute("animation__closeOp", {
+          property: "material.opacity",
+          to: 1,
+          dur: d.closeMs,
+          easing: "easeInOutQuad"
+        });
+
         setTimeout(() => {
-          phase1.setAttribute("visible", false);
-          phase2.setAttribute("visible", true);
-
-          const p2 = seat2.getAttribute("position");
-          rig.setAttribute("position", `${p2.x} ${p2.y} ${p2.z}`);
-
-          cam.setAttribute("position", `0 ${d.sitCamY} 0`);
-          this._isSitting = true;
-
-          // ✅ VR SAFE : on suit la caméra WebXR si dispo
-          const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
-          if (threeCam) threeCam.getWorldPosition(this._headWorldPrev);
-          else cam.object3D.getWorldPosition(this._headWorldPrev);
-
-          // Ouverture
-          lidTop.setAttribute("animation__openPos", {
-            property: "position",
-            to: "0 1.25 -0.55",
-            dur: d.openMs,
-            easing: "easeOutQuad"
-          });
-          lidBot.setAttribute("animation__openPos", {
-            property: "position",
-            to: "0 -1.25 -0.55",
-            dur: d.openMs,
-            easing: "easeOutQuad"
-          });
-          lidTop.setAttribute("animation__openOp", {
-            property: "material.opacity",
-            to: 0,
-            dur: d.openMs,
-            easing: "easeOutQuad"
-          });
-          lidBot.setAttribute("animation__openOp", {
-            property: "material.opacity",
-            to: 0,
-            dur: d.openMs,
-            easing: "easeOutQuad"
-          });
-
           setTimeout(() => {
-            lidTop.setAttribute("visible", false);
-            lidBot.setAttribute("visible", false);
-            this._running = false;
+            phase1.setAttribute("visible", false);
+            phase2.setAttribute("visible", true);
 
-            if (this._moveWasRemoved) {
-              rig.setAttribute("movement-controls", this._savedMoveControls);
-              this._moveWasRemoved = false;
-            }
+            const p2 = seat2.getAttribute("position");
+            rig.setAttribute("position", `${p2.x} ${p2.y} ${p2.z}`);
 
-            this.el.sceneEl.addEventListener("tick", this._tickStand);
-          }, d.openMs + 80);
+            cam.setAttribute("position", `0 ${d.sitCamY} 0`);
+            this._isSitting = true;
 
-        }, d.blackHoldMs);
-      }, d.closeMs + 30);
+            // VR SAFE : on suit la caméra WebXR si dispo
+            const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
+            if (threeCam) threeCam.getWorldPosition(this._headWorldPrev);
+            else cam.object3D.getWorldPosition(this._headWorldPrev);
 
-    }, t0);
-  },
+            // Ouverture
+            lidTop.setAttribute("animation__openPos", {
+              property: "position",
+              to: "0 1.25 -0.55",
+              dur: d.openMs,
+              easing: "easeOutQuad"
+            });
+            lidBot.setAttribute("animation__openPos", {
+              property: "position",
+              to: "0 -1.25 -0.55",
+              dur: d.openMs,
+              easing: "easeOutQuad"
+            });
+            lidTop.setAttribute("animation__openOp", {
+              property: "material.opacity",
+              to: 0,
+              dur: d.openMs,
+              easing: "easeOutQuad"
+            });
+            lidBot.setAttribute("animation__openOp", {
+              property: "material.opacity",
+              to: 0,
+              dur: d.openMs,
+              easing: "easeOutQuad"
+            });
 
-  _tickStand() {
-    if (!this._isSitting) return;
+            setTimeout(() => {
+              lidTop.setAttribute("visible", false);
+              lidBot.setAttribute("visible", false);
+              this._running = false;
 
-    const camEl = this.data.cam;
-    if (!camEl) return;
+              if (this._moveWasRemoved) {
+                rig.setAttribute("movement-controls", this._savedMoveControls);
+                this._moveWasRemoved = false;
+              }
 
-    const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
+              this.el.sceneEl.addEventListener("tick", this._tickStand);
+            }, d.openMs + 80);
 
-    if (threeCam) threeCam.getWorldPosition(this._headWorld);
-    else camEl.object3D.getWorldPosition(this._headWorld);
+          }, d.blackHoldMs);
+        }, d.closeMs + 30);
 
-    const dist = this._headWorld.distanceTo(this._headWorldPrev);
-    this._headWorldPrev.copy(this._headWorld);
+      }, t0);
+    },
 
-    if (dist > this.data.standMoveThreshold) {
-      this.standUp();
+    _tickStand() {
+      if (!this._isSitting) return;
+
+      const camEl = this.data.cam;
+      if (!camEl) return;
+
+      const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
+
+      if (threeCam) threeCam.getWorldPosition(this._headWorld);
+      else camEl.object3D.getWorldPosition(this._headWorld);
+
+      const dist = this._headWorld.distanceTo(this._headWorldPrev);
+      this._headWorldPrev.copy(this._headWorld);
+
+      if (dist > this.data.standMoveThreshold) {
+        this.standUp();
+      }
+    },
+
+    standUp() {
+      if (!this._isSitting) return;
+      const cam = this.data.cam;
+
+      cam.setAttribute("animation__stand", {
+        property: "position",
+        to: `0 ${this.data.standCamY} 0`,
+        dur: 350,
+        easing: "easeOutCubic"
+      });
+
+      this._isSitting = false;
+      this.el.sceneEl.removeEventListener("tick", this._tickStand);
     }
-  },
-
-  standUp() {
-    if (!this._isSitting) return;
-    const cam = this.data.cam;
-
-    cam.setAttribute("animation__stand", {
-      property: "position",
-      to: `0 ${this.data.standCamY} 0`,
-      dur: 350,
-      easing: "easeOutCubic"
-    });
-
-    this._isSitting = false;
-    this.el.sceneEl.removeEventListener("tick", this._tickStand);
-  }
-});
+  });
 
 
-/* =========================================================
-  turn-sound-switch (✅ VR + Desktop)
-  - crossfade front/back selon orientation
-  - + mute du son ACTIF si tu le regardes pile
-  - actif uniquement si scene (phase2) visible
-========================================================= */
-AFRAME.registerComponent("turn-sound-switch", {
-  schema: {
-    cam:   { type: "selector" },     // gardé pour compat, mais VR => scene.camera
-    front: { type: "selector" },
-    back:  { type: "selector" },
-    scene: { type: "selector" },
+  /* =========================================================
+    ✅ COMPONENT : turn-sound-switch (VR + Desktop, anti-spam)
+    ---------------------------------------------------------
+    - 1 son actif (front/back) selon orientation
+    - mute le son actif si tu le regardes pile
+    - crossfade UNIQUEMENT quand la cible change (sinon VR spam)
+  ========================================================= */
+  AFRAME.registerComponent("turn-sound-switch", {
+    schema: {
+      front: { type: "selector" },
+      back:  { type: "selector" },
+      scene: { type: "selector" },
 
-    threshold: { type: "number", default: 0.35 }, // switch front/back
-    fadeMs:    { type: "number", default: 450 },
+      threshold: { type: "number", default: 0.35 },
+      fadeMs:    { type: "number", default: 450 },
 
-    // mute "pile en face"
-    lookMuteThreshold: { type: "number", default: 0.95 },
+      lookMuteThreshold: { type: "number", default: 0.95 },
 
-    // volumes de base (quand pas muté)
-    frontBaseVol: { type: "number", default: 1.0 },
-    backBaseVol:  { type: "number", default: 1.0 }
-  },
+      frontBaseVol: { type: "number", default: 1.0 },
+      backBaseVol:  { type: "number", default: 1.0 }
+    },
 
-  init() {
-    this.state = null;
-    this._raf = null;
+    init() {
+      this._raf = null;
 
-    this._camDir = new THREE.Vector3();
-    this._camPos = new THREE.Vector3();
+      this._camDir = new THREE.Vector3();
+      this._camPos = new THREE.Vector3();
 
-    this._frontPos = new THREE.Vector3();
-    this._backPos  = new THREE.Vector3();
+      this._frontPos = new THREE.Vector3();
+      this._backPos  = new THREE.Vector3();
 
-    this._toFront = new THREE.Vector3();
-    this._toBack  = new THREE.Vector3();
+      this._toFront = new THREE.Vector3();
+      this._toBack  = new THREE.Vector3();
 
-    this._phaseWasVisible = false;
-  },
+      this._lastTargetFront = null;
+      this._lastTargetBack  = null;
 
-  tick() {
-    const d = this.data;
-    const sceneEl = d.scene;
+      this._phaseWasVisible = false;
+    },
 
-    const frontEl = d.front;
-    const backEl  = d.back;
-    if (!frontEl || !backEl) return;
+    tick() {
+      const d = this.data;
+      const frontEl = d.front;
+      const backEl  = d.back;
+      if (!frontEl || !backEl) return;
 
-    const phaseVisible = !sceneEl || sceneEl.getAttribute("visible") !== false;
+      const phaseVisible = !d.scene || d.scene.getAttribute("visible") !== false;
 
-    // si pas visible => on coupe tout propre
-    if (!phaseVisible) {
-      if (this._phaseWasVisible) {
+      // Phase pas visible => on coupe
+      if (!phaseVisible) {
         this._setVol(frontEl, 0);
         this._setVol(backEl, 0);
-        this.state = null;
+        this._lastTargetFront = 0;
+        this._lastTargetBack  = 0;
+        this._phaseWasVisible = false;
+        return;
       }
+
+      // Phase vient d’apparaître => reset targets pour forcer une mise en place propre
+      if (!this._phaseWasVisible) {
+        this._phaseWasVisible = true;
+        this._lastTargetFront = null;
+        this._lastTargetBack  = null;
+      }
+
+      const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
+      if (!threeCam) return;
+
+      if (!frontEl.components.sound || !backEl.components.sound) return;
+
+      threeCam.getWorldDirection(this._camDir);
+      threeCam.getWorldPosition(this._camPos);
+
+      frontEl.object3D.getWorldPosition(this._frontPos);
+      backEl.object3D.getWorldPosition(this._backPos);
+
+      this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
+      this._toBack.copy(this._backPos).sub(this._camPos).normalize();
+
+      const dotFront = this._camDir.dot(this._toFront);
+      const dotBack  = this._camDir.dot(this._toBack);
+
+      const active = (dotFront >= d.threshold) ? "front" : "back";
+
+      let targetFront = (active === "front") ? d.frontBaseVol : 0;
+      let targetBack  = (active === "back")  ? d.backBaseVol  : 0;
+
+      // mute si tu regardes pile le son actif
+      if (active === "front" && dotFront >= d.lookMuteThreshold) targetFront = 0;
+      if (active === "back"  && dotBack  >= d.lookMuteThreshold) targetBack  = 0;
+
+      // ✅ anti-spam : si rien ne change, on ne fait rien
+      if (targetFront === this._lastTargetFront && targetBack === this._lastTargetBack) return;
+
+      this._lastTargetFront = targetFront;
+      this._lastTargetBack  = targetBack;
+
+      this._crossfadeTo(frontEl, backEl, targetFront, targetBack, d.fadeMs);
+    },
+
+    _setVol(el, v) {
+      el.setAttribute("sound", "volume", v);
+    },
+
+    _crossfadeTo(frontEl, backEl, vF, vB, ms) {
+      const t0 = performance.now();
+      const startF = (frontEl.getAttribute("sound")?.volume ?? 1);
+      const startB = (backEl.getAttribute("sound")?.volume ?? 1);
+
+      if (this._raf) cancelAnimationFrame(this._raf);
+
+      const step = () => {
+        const t = Math.min(1, (performance.now() - t0) / ms);
+        const e = t * t * (3 - 2 * t); // smoothstep
+
+        this._setVol(frontEl, startF + (vF - startF) * e);
+        this._setVol(backEl,  startB + (vB - startB) * e);
+
+        if (t < 1) this._raf = requestAnimationFrame(step);
+      };
+
+      this._raf = requestAnimationFrame(step);
+    }
+  });
+
+
+  /* =========================================================
+    turn-image-switch (VR SAFE) — inchangé sauf caméra VR
+  ========================================================= */
+  AFRAME.registerComponent("turn-image-switch", {
+    schema: {
+      front: { type: "selector" },
+      back: { type: "selector" },
+      scene: { type: "selector" },
+      threshold: { type: "number", default: 0.35 },
+      fadeMs: { type: "number", default: 450 }
+    },
+
+    init() {
+      this.state = null;
+      this._raf = null;
+
+      this._camDir = new THREE.Vector3();
+      this._camPos = new THREE.Vector3();
+      this._frontPos = new THREE.Vector3();
+      this._toFront = new THREE.Vector3();
+
       this._phaseWasVisible = false;
-      return;
-    }
 
-    if (!this._phaseWasVisible) {
-      this._phaseWasVisible = true;
-      // init state sans glitch
-      this.state = "front";
-      return;
-    }
+      const ensureFade = (el) => {
+        if (!el) return;
+        el.setAttribute("material", "transparent", true);
+        if (el.getAttribute("material")?.opacity == null) {
+          el.setAttribute("material", "opacity", 1);
+        }
+      };
+      ensureFade(this.data.front);
+      ensureFade(this.data.back);
+    },
 
-    // ✅ LA SOURCE DU REGARD EN VR
-    const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
-    if (!threeCam) return;
+    tick() {
+      const d = this.data;
+      const frontEl = d.front;
+      const backEl = d.back;
+      if (!frontEl || !backEl) return;
 
-    threeCam.getWorldDirection(this._camDir);
-    threeCam.getWorldPosition(this._camPos);
+      const phaseVisible = !d.scene || d.scene.getAttribute("visible") !== false;
 
-    // positions des sons
-    frontEl.object3D.getWorldPosition(this._frontPos);
-    backEl.object3D.getWorldPosition(this._backPos);
-
-    this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
-    this._toBack.copy(this._backPos).sub(this._camPos).normalize();
-
-    const dotFront = this._camDir.dot(this._toFront);
-    const dotBack  = this._camDir.dot(this._toBack);
-
-    // 1) Switch logique front/back
-    // si tu regardes plutôt vers l'avant (dotFront >= threshold) => FRONT actif, sinon BACK actif
-    const nextState = (dotFront >= d.threshold) ? "front" : "back";
-
-    // 2) Volumes cibles de base (crossfade)
-    let targetFront = (nextState === "front") ? d.frontBaseVol : 0;
-    let targetBack  = (nextState === "back")  ? d.backBaseVol  : 0;
-
-    // 3) Mute du son ACTIF si tu le regardes pile
-    if (nextState === "front" && dotFront >= d.lookMuteThreshold) {
-      targetFront = 0;
-    }
-    if (nextState === "back" && dotBack >= d.lookMuteThreshold) {
-      targetBack = 0;
-    }
-
-    // 4) Crossfade si changement OU si mute/unmute change la cible
-    // (on fade toujours vers targets, sans conflit externe)
-    this._crossfadeTo(frontEl, backEl, targetFront, targetBack, d.fadeMs);
-
-    this.state = nextState;
-  },
-
-  _setVol(el, v) {
-    if (!el || !el.components || !el.components.sound) return;
-    el.setAttribute("sound", "volume", v);
-  },
-
-  _crossfadeTo(frontEl, backEl, vF, vB, ms) {
-    const t0 = performance.now();
-    const startF = (frontEl.getAttribute("sound")?.volume ?? 1);
-    const startB = (backEl.getAttribute("sound")?.volume ?? 1);
-
-    if (this._raf) cancelAnimationFrame(this._raf);
-
-    const step = () => {
-      const t = Math.min(1, (performance.now() - t0) / ms);
-      const e = t * t * (3 - 2 * t); // smoothstep
-
-      const curF = startF + (vF - startF) * e;
-      const curB = startB + (vB - startB) * e;
-
-      this._setVol(frontEl, curF);
-      this._setVol(backEl,  curB);
-
-      if (t < 1) this._raf = requestAnimationFrame(step);
-    };
-
-    this._raf = requestAnimationFrame(step);
-  }
-});
-
-
-/* =========================================================
-  turn-image-switch (VR SAFE)
-========================================================= */
-AFRAME.registerComponent("turn-image-switch", {
-  schema: {
-    cam: { type: "selector" }, // gardé, VR => scene.camera
-    front: { type: "selector" },
-    back: { type: "selector" },
-    scene: { type: "selector" },
-    threshold: { type: "number", default: 0.35 },
-    fadeMs: { type: "number", default: 450 }
-  },
-
-  init() {
-    this.state = null;
-    this._raf = null;
-
-    this._camDir = new THREE.Vector3();
-    this._camPos = new THREE.Vector3();
-    this._frontPos = new THREE.Vector3();
-    this._toFront = new THREE.Vector3();
-
-    this._phaseWasVisible = false;
-
-    const ensureFade = (el) => {
-      if (!el) return;
-      el.setAttribute("material", "transparent", true);
-      if (el.getAttribute("material")?.opacity == null) {
-        el.setAttribute("material", "opacity", 1);
+      if (!phaseVisible) {
+        if (this._phaseWasVisible) {
+          frontEl.setAttribute("visible", false);
+          backEl.setAttribute("visible", false);
+          this.state = null;
+        }
+        this._phaseWasVisible = false;
+        return;
       }
-    };
-    ensureFade(this.data.front);
-    ensureFade(this.data.back);
-  },
 
-  tick() {
-    const d = this.data;
-    const sceneEl = d.scene;
-
-    const frontEl = d.front;
-    const backEl = d.back;
-    if (!frontEl || !backEl) return;
-
-    const phaseVisible = !sceneEl || sceneEl.getAttribute("visible") !== false;
-
-    if (!phaseVisible) {
-      if (this._phaseWasVisible) {
-        frontEl.setAttribute("visible", false);
-        backEl.setAttribute("visible", false);
-        this.state = null;
+      if (!this._phaseWasVisible) {
+        this._phaseWasVisible = true;
+        this.state = (frontEl.getAttribute("visible") !== false) ? "front" : "back";
+        return;
       }
-      this._phaseWasVisible = false;
-      return;
-    }
 
-    if (!this._phaseWasVisible) {
-      this._phaseWasVisible = true;
-      this.state = (frontEl.getAttribute("visible") !== false) ? "front" : "back";
-      return;
-    }
+      const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
+      if (!threeCam) return;
 
-    const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
-    if (!threeCam) return;
+      threeCam.getWorldDirection(this._camDir);
+      threeCam.getWorldPosition(this._camPos);
 
-    threeCam.getWorldDirection(this._camDir);
-    threeCam.getWorldPosition(this._camPos);
+      frontEl.object3D.getWorldPosition(this._frontPos);
+      this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
 
-    frontEl.object3D.getWorldPosition(this._frontPos);
-    this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
+      const dot = this._camDir.dot(this._toFront);
 
-    const dot = this._camDir.dot(this._toFront);
-
-    const next = (dot >= d.threshold) ? "front" : "back";
-    if (next !== this.state) {
-      this.state = next;
-      this._crossfade(
-        next === "front" ? frontEl : backEl,
-        next === "front" ? backEl : frontEl
-      );
-    }
-  },
-
-  _crossfade(onEl, offEl) {
-    const duration = this.data.fadeMs;
-    const t0 = performance.now();
-
-    onEl.setAttribute("visible", true);
-    offEl.setAttribute("visible", true);
-
-    const startOn  = (onEl.getAttribute("material")?.opacity ?? 0);
-    const startOff = (offEl.getAttribute("material")?.opacity ?? 1);
-
-    if (this._raf) cancelAnimationFrame(this._raf);
-
-    const step = () => {
-      const t = Math.min(1, (performance.now() - t0) / duration);
-      const e = t * t * (3 - 2 * t);
-
-      onEl.setAttribute("material", "opacity", startOn + (1 - startOn) * e);
-      offEl.setAttribute("material", "opacity", startOff * (1 - e));
-
-      if (t < 1) {
-        this._raf = requestAnimationFrame(step);
-      } else {
-        offEl.setAttribute("visible", false);
+      const next = (dot >= d.threshold) ? "front" : "back";
+      if (next !== this.state) {
+        this.state = next;
+        this._crossfade(
+          next === "front" ? frontEl : backEl,
+          next === "front" ? backEl : frontEl
+        );
       }
-    };
+    },
 
-    this._raf = requestAnimationFrame(step);
-  }
-});
+    _crossfade(onEl, offEl) {
+      const duration = this.data.fadeMs;
+      const t0 = performance.now();
+
+      onEl.setAttribute("visible", true);
+      offEl.setAttribute("visible", true);
+
+      const startOn  = (onEl.getAttribute("material")?.opacity ?? 0);
+      const startOff = (offEl.getAttribute("material")?.opacity ?? 1);
+
+      if (this._raf) cancelAnimationFrame(this._raf);
+
+      const step = () => {
+        const t = Math.min(1, (performance.now() - t0) / duration);
+        const e = t * t * (3 - 2 * t);
+
+        onEl.setAttribute("material", "opacity", startOn + (1 - startOn) * e);
+        offEl.setAttribute("material", "opacity", startOff * (1 - e));
+
+        if (t < 1) {
+          this._raf = requestAnimationFrame(step);
+        } else {
+          offEl.setAttribute("visible", false);
+        }
+      };
+
+      this._raf = requestAnimationFrame(step);
+    }
+  });
 
 
-/* =========================================================
-  AUDIO UNLOCK (Autoplay)
-========================================================= */
-const _unlockAudio = () => {
-  const phase2 = document.querySelector("#phase2");
-  const isPhase2 = phase2 && phase2.getAttribute("visible") !== false;
+  /* =========================================================
+    AUDIO UNLOCK (Autoplay) + enter-vr (IMPORTANT)
+  ========================================================= */
+  const _unlockAudio = () => {
+    const phase2 = document.querySelector("#phase2");
+    const isPhase2 = phase2 && phase2.getAttribute("visible") !== false;
 
-  const f = document.querySelector("#soundFront")?.components?.sound;
-  const b = document.querySelector("#soundBack")?.components?.sound;
+    const f = document.querySelector("#soundFront")?.components?.sound;
+    const b = document.querySelector("#soundBack")?.components?.sound;
 
-  try { f?.playSound(); } catch (e) {}
-  try { b?.playSound(); } catch (e) {}
+    try { f?.playSound(); } catch (e) {}
+    try { b?.playSound(); } catch (e) {}
 
-  if (!isPhase2) {
-    try { f?.pauseSound(); } catch (e) {}
-    try { b?.pauseSound(); } catch (e) {}
-  }
-};
+    if (!isPhase2) {
+      try { f?.pauseSound(); } catch (e) {}
+      try { b?.pauseSound(); } catch (e) {}
+    }
+  };
 
-window.addEventListener("click", _unlockAudio, { once: true });
-window.addEventListener("touchstart", _unlockAudio, { once: true });
-</script>
+  window.addEventListener("click", _unlockAudio, { once: true });
+  window.addEventListener("touchstart", _unlockAudio, { once: true });
 
+  document.addEventListener("DOMContentLoaded", () => {
+    const scene = document.querySelector("a-scene");
+    if (scene) scene.addEventListener("enter-vr", _unlockAudio);
+  });
+  </script>
 </head>
 
 <body>
@@ -576,20 +576,7 @@ window.addEventListener("touchstart", _unlockAudio, { once: true });
       turn-sound-switch="cam: #cam; front: #soundFront; back: #soundBack; scene: #phase2; threshold: 0.35; fadeMs: 450; lookMuteThreshold: 0.95; frontBaseVol: 1; backBaseVol: 1"
 
       turn-image-switch="cam: #cam; front: #imgFront; back: #imgBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
-    >
-<!-- Son FRONT (positionnel) -->
-
-<a-entity id="soundFront"
-  position="-0.197 0.564 -5.801"
-  sound="src: url(sons/voices-murmur.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
-</a-entity>
-
-<a-entity id="soundBack"
-  position="-0.06 -1.113 1.930"
-  sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
-</a-entity>
-
-  
+    >  
       <!-- CAMERA -->
       <a-camera id="cam" speed="0.15">
 
@@ -698,7 +685,17 @@ window.addEventListener("touchstart", _unlockAudio, { once: true });
     <a-entity id="phase2" visible="false">
       <a-sky color="#94CEDB"></a-sky>
 
+<!-- Son FRONT (positionnel) -->
 
+<a-entity id="soundFront"
+  position="-0.197 0.564 -5.801"
+  sound="src: url(sons/voices-murmur.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
+</a-entity>
+
+<a-entity id="soundBack"
+  position="-0.06 -1.113 1.930"
+  sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
+</a-entity>
       <a-entity
   position="-16.367 1.6 -17.838"
   sound="src: url(sons/sound-wind.mp3); autoplay: true; loop: true; positional: true; volume: 0.8;">
