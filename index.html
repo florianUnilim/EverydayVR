@@ -6,21 +6,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-<script>
+  <script>
   /* =========================================================
-    ✅ SCRIPT COMPLET (PC + VR) — corrigé SANS casser ton projet
+    ✅ CORRECTIONS APPLIQUÉES ICI (sans casser ton projet)
     ---------------------------------------------------------
-    MODIFS FAITES :
-    1) turn-sound-switch : VR SAFE + anti-spam (ne crossfade que si cible change)
-    2) Audio unlock : relancé aussi au moment "enter-vr"
-    3) IMPORTANT côté HTML (dans <body>) :
-       -> les sons #soundFront / #soundBack doivent être HORS du rig
-       -> (je te donne la version complète du <body> plus bas)
+    A) AUDIO VR (gros fix) :
+       - on ne PAUSE JAMAIS les sons dans _unlockAudio()
+       - on resume l'AudioContext
+       - on déclenche aussi sur enter-vr + triggerdown/gripdown
+
+    B) CROSSHAIR (PC only) :
+       - on le met DANS la caméra (HUD)
+       - on le cache en VR (enter-vr) / on le remet en sortie (exit-vr)
+
+    C) SONS :
+       - #soundFront / #soundBack sont AU NIVEAU DE LA SCÈNE (pas dans phase2)
+       - volume initial = 0 (silence en phase1)
+       - turn-sound-switch remonte le volume seulement en phase2
   ========================================================= */
 
-  /* =========================================================
-    COMPONENT : bench-sit-transition (VR SAFE)
-  ========================================================= */
+  /* =========================
+    bench-sit-transition (INCHANGÉ)
+  ========================= */
   AFRAME.registerComponent("bench-sit-transition", {
     schema: {
       rig:   { type: "selector" },
@@ -105,14 +112,12 @@
 
       this.resetLidsInstant();
 
-      // Désactive movement-controls pendant anim (sinon ça fight)
       this._savedMoveControls = rig.getAttribute("movement-controls");
       if (this._savedMoveControls) {
         rig.removeAttribute("movement-controls");
         this._moveWasRemoved = true;
       }
 
-      // Tourner vers le banc
       rig.setAttribute("animation__turn", {
         property: "rotation",
         to: `0 ${d.targetYaw} 0`,
@@ -120,7 +125,6 @@
         easing: "easeOutCubic"
       });
 
-      // Approche
       const p1 = seat1.getAttribute("position");
       rig.setAttribute("animation__approach", {
         property: "position",
@@ -132,7 +136,6 @@
       const t0 = Math.max(d.rotateMs, d.move1Ms) + d.preDelayMs;
 
       setTimeout(() => {
-        // Fermeture
         lidTop.setAttribute("visible", true);
         lidBot.setAttribute("visible", true);
         lidTop.setAttribute("material", "shader: flat; color:#000; transparent:true; opacity:0");
@@ -175,12 +178,10 @@
             cam.setAttribute("position", `0 ${d.sitCamY} 0`);
             this._isSitting = true;
 
-            // VR SAFE : on suit la caméra WebXR si dispo
             const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
             if (threeCam) threeCam.getWorldPosition(this._headWorldPrev);
             else cam.object3D.getWorldPosition(this._headWorldPrev);
 
-            // Ouverture
             lidTop.setAttribute("animation__openPos", {
               property: "position",
               to: "0 1.25 -0.55",
@@ -232,16 +233,13 @@
       if (!camEl) return;
 
       const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
-
       if (threeCam) threeCam.getWorldPosition(this._headWorld);
       else camEl.object3D.getWorldPosition(this._headWorld);
 
       const dist = this._headWorld.distanceTo(this._headWorldPrev);
       this._headWorldPrev.copy(this._headWorld);
 
-      if (dist > this.data.standMoveThreshold) {
-        this.standUp();
-      }
+      if (dist > this.data.standMoveThreshold) this.standUp();
     },
 
     standUp() {
@@ -260,14 +258,9 @@
     }
   });
 
-
-  /* =========================================================
-    ✅ COMPONENT : turn-sound-switch (VR + Desktop, anti-spam)
-    ---------------------------------------------------------
-    - 1 son actif (front/back) selon orientation
-    - mute le son actif si tu le regardes pile
-    - crossfade UNIQUEMENT quand la cible change (sinon VR spam)
-  ========================================================= */
+  /* =========================
+    turn-sound-switch (anti-spam VR)
+  ========================= */
   AFRAME.registerComponent("turn-sound-switch", {
     schema: {
       front: { type: "selector" },
@@ -309,7 +302,6 @@
 
       const phaseVisible = !d.scene || d.scene.getAttribute("visible") !== false;
 
-      // Phase pas visible => on coupe
       if (!phaseVisible) {
         this._setVol(frontEl, 0);
         this._setVol(backEl, 0);
@@ -319,7 +311,6 @@
         return;
       }
 
-      // Phase vient d’apparaître => reset targets pour forcer une mise en place propre
       if (!this._phaseWasVisible) {
         this._phaseWasVisible = true;
         this._lastTargetFront = null;
@@ -348,11 +339,9 @@
       let targetFront = (active === "front") ? d.frontBaseVol : 0;
       let targetBack  = (active === "back")  ? d.backBaseVol  : 0;
 
-      // mute si tu regardes pile le son actif
       if (active === "front" && dotFront >= d.lookMuteThreshold) targetFront = 0;
       if (active === "back"  && dotBack  >= d.lookMuteThreshold) targetBack  = 0;
 
-      // ✅ anti-spam : si rien ne change, on ne fait rien
       if (targetFront === this._lastTargetFront && targetBack === this._lastTargetBack) return;
 
       this._lastTargetFront = targetFront;
@@ -367,14 +356,14 @@
 
     _crossfadeTo(frontEl, backEl, vF, vB, ms) {
       const t0 = performance.now();
-      const startF = (frontEl.getAttribute("sound")?.volume ?? 1);
-      const startB = (backEl.getAttribute("sound")?.volume ?? 1);
+      const startF = (frontEl.getAttribute("sound")?.volume ?? 0);
+      const startB = (backEl.getAttribute("sound")?.volume ?? 0);
 
       if (this._raf) cancelAnimationFrame(this._raf);
 
       const step = () => {
         const t = Math.min(1, (performance.now() - t0) / ms);
-        const e = t * t * (3 - 2 * t); // smoothstep
+        const e = t * t * (3 - 2 * t);
 
         this._setVol(frontEl, startF + (vF - startF) * e);
         this._setVol(backEl,  startB + (vB - startB) * e);
@@ -386,10 +375,9 @@
     }
   });
 
-
-  /* =========================================================
-    turn-image-switch (VR SAFE) — inchangé sauf caméra VR
-  ========================================================= */
+  /* =========================
+    turn-image-switch (inchangé)
+  ========================= */
   AFRAME.registerComponent("turn-image-switch", {
     schema: {
       front: { type: "selector" },
@@ -413,9 +401,7 @@
       const ensureFade = (el) => {
         if (!el) return;
         el.setAttribute("material", "transparent", true);
-        if (el.getAttribute("material")?.opacity == null) {
-          el.setAttribute("material", "opacity", 1);
-        }
+        if (el.getAttribute("material")?.opacity == null) el.setAttribute("material", "opacity", 1);
       };
       ensureFade(this.data.front);
       ensureFade(this.data.back);
@@ -455,8 +441,8 @@
       this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
 
       const dot = this._camDir.dot(this._toFront);
-
       const next = (dot >= d.threshold) ? "front" : "back";
+
       if (next !== this.state) {
         this.state = next;
         this._crossfade(
@@ -485,64 +471,77 @@
         onEl.setAttribute("material", "opacity", startOn + (1 - startOn) * e);
         offEl.setAttribute("material", "opacity", startOff * (1 - e));
 
-        if (t < 1) {
-          this._raf = requestAnimationFrame(step);
-        } else {
-          offEl.setAttribute("visible", false);
-        }
+        if (t < 1) this._raf = requestAnimationFrame(step);
+        else offEl.setAttribute("visible", false);
       };
 
       this._raf = requestAnimationFrame(step);
     }
   });
 
-
-  /* =========================================================
-    AUDIO UNLOCK (Autoplay) + enter-vr (IMPORTANT)
-  ========================================================= */
+  /* =========================
+    ✅ AUDIO UNLOCK (FIX VR) — on ne pause jamais
+  ========================= */
   const _unlockAudio = () => {
-    const phase2 = document.querySelector("#phase2");
-    const isPhase2 = phase2 && phase2.getAttribute("visible") !== false;
+    // resume audio context (VR)
+    try {
+      const ctx = AFRAME.audioContext;
+      if (ctx && ctx.state === "suspended") ctx.resume();
+    } catch (e) {}
 
+    // play (même si volume=0)
     const f = document.querySelector("#soundFront")?.components?.sound;
     const b = document.querySelector("#soundBack")?.components?.sound;
 
     try { f?.playSound(); } catch (e) {}
     try { b?.playSound(); } catch (e) {}
-
-    if (!isPhase2) {
-      try { f?.pauseSound(); } catch (e) {}
-      try { b?.pauseSound(); } catch (e) {}
-    }
   };
 
+  // Desktop
   window.addEventListener("click", _unlockAudio, { once: true });
   window.addEventListener("touchstart", _unlockAudio, { once: true });
 
+  // VR + manettes
   document.addEventListener("DOMContentLoaded", () => {
     const scene = document.querySelector("a-scene");
-    if (scene) scene.addEventListener("enter-vr", _unlockAudio);
+    if (!scene) return;
+
+    scene.addEventListener("enter-vr", () => setTimeout(_unlockAudio, 50));
+
+    const hookControllers = () => {
+      const left = document.querySelector("#leftHand");
+      const right = document.querySelector("#rightHand");
+      [left, right].forEach((h) => {
+        if (!h) return;
+        h.addEventListener("triggerdown", _unlockAudio, { once: true });
+        h.addEventListener("gripdown", _unlockAudio, { once: true });
+      });
+    };
+
+    // après chargement, les entités mains existent sûr
+    scene.addEventListener("loaded", hookControllers);
+
+    // fallback canvas (Quest etc.)
+    scene.addEventListener("loaded", () => {
+      if (scene.canvas) {
+        scene.canvas.addEventListener("mousedown", _unlockAudio, { once: true });
+        scene.canvas.addEventListener("touchstart", _unlockAudio, { once: true });
+      }
+    });
   });
 
+  /* =========================
+    ✅ CROSSHAIR : visible PC, caché VR
+  ========================= */
   document.addEventListener("DOMContentLoaded", () => {
-  const scene = document.querySelector("a-scene");
-  const crosshair = document.querySelector("#crosshair");
-  if (!scene || !crosshair) return;
+    const scene = document.querySelector("a-scene");
+    const crosshair = document.querySelector("#crosshair");
+    if (!scene || !crosshair) return;
 
-  // PC -> visible
-  crosshair.setAttribute("visible", true);
-
-  // En VR -> caché
-  scene.addEventListener("enter-vr", () => {
-    crosshair.setAttribute("visible", false);
-  });
-
-  // En sortant de VR -> réaffiché
-  scene.addEventListener("exit-vr", () => {
     crosshair.setAttribute("visible", true);
+    scene.addEventListener("enter-vr", () => crosshair.setAttribute("visible", false));
+    scene.addEventListener("exit-vr",  () => crosshair.setAttribute("visible", true));
   });
-});
-
   </script>
 </head>
 
@@ -550,7 +549,7 @@
   <a-scene fog="type: Exponential; color: #000000; density: 0.0025;">
 
     <!-- ===========================
-      ASSETS
+      ASSETS (inchangé)
     ============================ -->
     <a-assets>
       <img id="fabricColor"  src="/EverydayVR/models/textures/Fabric019_1K-JPG_Color.jpg">
@@ -572,8 +571,6 @@
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
       <a-asset-item id="mannequin" src="/EverydayVR/models/mannequin-silouette.glb"></a-asset-item>
       <a-asset-item id="trench" src="/EverydayVR/models/trench.glb"></a-asset-item>
-      
-      
 
       <img id="montagne-bg-2" src="/images/bg-montagne-2.png">
       <img id="montagne-2"    src="/images/montagne-2.png">
@@ -583,30 +580,30 @@
     </a-assets>
 
     <!-- ===========================
-      RIG (camera + mains)
-      - movement-controls : déplacement
-      - turn-sound-switch : audio front/back + mute quand on regarde pile
-      - turn-image-switch : switch images
+      ✅ RIG
+      IMPORTANT :
+      - j’ai enlevé "cam: #cam" dans turn-sound-switch/turn-image-switch
+        (ton composant n'en a pas besoin)
+      - crosshair sera DANS la caméra (plus bas)
     ============================ -->
     <a-entity
       id="rig"
       position="0 1.2 4"
       rotation="0 0 0"
       movement-controls="speed: 0.15; fly: false; constrainToNavMesh: true"
-      turn-sound-switch="cam: #cam; front: #soundFront; back: #soundBack; scene: #phase2; threshold: 0.35; fadeMs: 450; lookMuteThreshold: 0.95; frontBaseVol: 1; backBaseVol: 1"
-
-      turn-image-switch="cam: #cam; front: #imgFront; back: #imgBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
-    >  
-    <a-entity id="crosshair"
-  position="0 0 -1"
-  geometry="primitive: ring; radiusInner: 0.006; radiusOuter: 0.009"
-  material="shader: flat; color: #ffffff; opacity: 0.9; transparent: true"
-  visible="true">
-</a-entity>
+      turn-sound-switch="front: #soundFront; back: #soundBack; scene: #phase2; threshold: 0.35; fadeMs: 450; lookMuteThreshold: 0.95; frontBaseVol: 1; backBaseVol: 1"
+      turn-image-switch="front: #imgFront; back: #imgBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
+    >
       <!-- CAMERA -->
       <a-camera id="cam" speed="0.15">
 
-        
+        <!-- ✅ CROSSHAIR : DOIT ÊTRE DANS LA CAMERA (HUD) -->
+        <a-entity id="crosshair"
+          position="0 0 -1"
+          geometry="primitive: ring; radiusInner: 0.006; radiusOuter: 0.009"
+          material="shader: flat; color: #ffffff; opacity: 0.9; transparent: true"
+          visible="true">
+        </a-entity>
 
         <!-- Paupières -->
         <a-plane id="lidTop"
@@ -630,6 +627,20 @@
       <!-- VR lasers -->
       <a-entity id="leftHand"  laser-controls="hand: left"  raycaster="objects: .clickable"></a-entity>
       <a-entity id="rightHand" laser-controls="hand: right" raycaster="objects: .clickable"></a-entity>
+    </a-entity>
+
+    <!-- ===========================
+      ✅ SONS : déplacés AU NIVEAU DE LA SCÈNE (pas dans phase2)
+      + volume 0 au départ (silence phase1)
+    ============================ -->
+    <a-entity id="soundFront"
+      position="-0.197 0.564 -5.801"
+      sound="src: url(sons/voices-murmur.mp3); autoplay: true; loop: true; positional: true; volume: 0;">
+    </a-entity>
+
+    <a-entity id="soundBack"
+      position="-0.06 -1.113 1.930"
+      sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 0;">
     </a-entity>
 
     <!-- Lumières -->
@@ -694,6 +705,7 @@
         rotation="0 45 0"
         scale="1.5 1.5 1.5">
       </a-entity>
+
       <a-entity
         id="trench"
         gltf-model="#trench"
@@ -706,26 +718,15 @@
     </a-entity>
 
     <!-- ===========================
-      PHASE 2
+      PHASE 2 (j’ai retiré tes soundFront/soundBack d’ici)
     ============================ -->
     <a-entity id="phase2" visible="false">
       <a-sky color="#94CEDB"></a-sky>
 
-<!-- Son FRONT (positionnel) -->
-
-<a-entity id="soundFront"
-  position="-0.197 0.564 -5.801"
-  sound="src: url(sons/voices-murmur.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
-</a-entity>
-
-<a-entity id="soundBack"
-  position="-0.06 -1.113 1.930"
-  sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
-</a-entity>
       <a-entity
-  position="-16.367 1.6 -17.838"
-  sound="src: url(sons/sound-wind.mp3); autoplay: true; loop: true; positional: true; volume: 0.8;">
-</a-entity>
+        position="-16.367 1.6 -17.838"
+        sound="src: url(sons/sound-wind.mp3); autoplay: true; loop: true; positional: true; volume: 0.8;">
+      </a-entity>
 
       <a-entity
         id="benchModel_phase2"
@@ -765,17 +766,12 @@
           roughness: 1;
           transparent: true;
           opacity: 1;
-          alphaMap: #solMask;
           alphaTest: 0.3;
           side: double;
         ">
       </a-plane>
 
-      <!-- Images superposées (switch selon orientation)
-           ATTENTION : tu as demandé que montagne-bg-2 soit "dans le dos"
-           => imgBack = montagne-bg-2
-           => imgFront = montagne-2
-      -->
+      <!-- Images -->
       <a-image
         id="imgFront"
         src="#montagne-2"
