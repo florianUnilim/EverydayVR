@@ -571,7 +571,6 @@
       <a-asset-item id="Porte-manteau" src="/EverydayVR/models/Coat-Rack.glb"></a-asset-item>
       <a-asset-item id="navmesh" src="/EverydayVR/models/navmesh.glb"></a-asset-item>
 
-      <img id="montagne-bg" src="/images/bg-montagne.png">
       <img id="montagne-bg-2" src="/images/bg-montagne-2.png">
       <img id="montagne-2" src="/images/montagne-2.png">
       <img id="bg-left" src="/images/bg-leftside.png">
@@ -591,13 +590,13 @@
       <!-- CAMERA = tête -->
       <a-camera id="cam" speed="0.15">
 
-        <!-- Son DEVANT 
+        <!-- Son DEVANT -->
         <a-entity
           id="soundFront"
           position="0 0 -3"
           sound="src: url(sons/voices-murmur.mp3); autoplay: true; loop: true; positional: true; volume: 1;"
           mute-when-looked="camera: #cam; threshold: 0.95; onVolume: 0.8; offVolume: 0">
-        </a-entity> -->
+        </a-entity> 
 
         <!-- Son DERRIERE -->
         <a-entity
