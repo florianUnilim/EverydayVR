@@ -261,223 +261,256 @@
   /* =========================
     turn-sound-switch (anti-spam VR)
   ========================= */
-  AFRAME.registerComponent("turn-sound-switch", {
-    schema: {
-      front: { type: "selector" },
-      back:  { type: "selector" },
-      scene: { type: "selector" },
+ AFRAME.registerComponent("turn-sound-switch", {
+  schema: {
+    front: { type: "selector" },
+    back:  { type: "selector" },
+    scene: { type: "selector" },
 
-      threshold: { type: "number", default: 0.35 },
-      fadeMs:    { type: "number", default: 450 },
+    threshold: { type: "number", default: 0.35 },
+    fadeMs:    { type: "number", default: 450 },
 
-      lookMuteThreshold: { type: "number", default: 0.95 },
+    lookMuteThreshold: { type: "number", default: 0.95 },
 
-      frontBaseVol: { type: "number", default: 1.0 },
-      backBaseVol:  { type: "number", default: 1.0 }
-    },
+    frontBaseVol: { type: "number", default: 1.0 },
+    backBaseVol:  { type: "number", default: 1.0 }
+  },
 
-    init() {
-      this._raf = null;
+  init() {
+    this._raf = null;
 
-      this._camDir = new THREE.Vector3();
-      this._camPos = new THREE.Vector3();
+    this._camDir = new THREE.Vector3();
+    this._camPos = new THREE.Vector3();
 
-      this._frontPos = new THREE.Vector3();
-      this._backPos  = new THREE.Vector3();
+    this._frontPos = new THREE.Vector3();
+    this._backPos  = new THREE.Vector3();
 
-      this._toFront = new THREE.Vector3();
-      this._toBack  = new THREE.Vector3();
+    this._toFront = new THREE.Vector3();
+    this._toBack  = new THREE.Vector3();
 
+    this._lastTargetFront = null;
+    this._lastTargetBack  = null;
+
+    this._phaseWasVisible = false;
+  },
+
+  // ✅ VR SAFE : récupère la caméra active (casque) si WebXR, sinon caméra normale
+  _getActiveCamera() {
+    const scene = this.el.sceneEl;
+    if (!scene || !scene.camera) return null;
+
+    const r = scene.renderer;
+    const xr = r && r.xr;
+
+    if (xr && xr.isPresenting) {
+      return xr.getCamera(scene.camera);
+    }
+    return scene.camera;
+  },
+
+  tick() {
+    const d = this.data;
+    const frontEl = d.front;
+    const backEl  = d.back;
+    if (!frontEl || !backEl) return;
+
+    const phaseVisible = !d.scene || d.scene.getAttribute("visible") !== false;
+
+    // Phase pas visible => silence
+    if (!phaseVisible) {
+      this._setVol(frontEl, 0);
+      this._setVol(backEl, 0);
+      this._lastTargetFront = 0;
+      this._lastTargetBack  = 0;
+      this._phaseWasVisible = false;
+      return;
+    }
+
+    if (!this._phaseWasVisible) {
+      this._phaseWasVisible = true;
       this._lastTargetFront = null;
       this._lastTargetBack  = null;
-
-      this._phaseWasVisible = false;
-    },
-
-    tick() {
-      const d = this.data;
-      const frontEl = d.front;
-      const backEl  = d.back;
-      if (!frontEl || !backEl) return;
-
-      const phaseVisible = !d.scene || d.scene.getAttribute("visible") !== false;
-
-      if (!phaseVisible) {
-        this._setVol(frontEl, 0);
-        this._setVol(backEl, 0);
-        this._lastTargetFront = 0;
-        this._lastTargetBack  = 0;
-        this._phaseWasVisible = false;
-        return;
-      }
-
-      if (!this._phaseWasVisible) {
-        this._phaseWasVisible = true;
-        this._lastTargetFront = null;
-        this._lastTargetBack  = null;
-      }
-
-      const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
-      if (!threeCam) return;
-
-      if (!frontEl.components.sound || !backEl.components.sound) return;
-
-      threeCam.getWorldDirection(this._camDir);
-      threeCam.getWorldPosition(this._camPos);
-
-      frontEl.object3D.getWorldPosition(this._frontPos);
-      backEl.object3D.getWorldPosition(this._backPos);
-
-      this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
-      this._toBack.copy(this._backPos).sub(this._camPos).normalize();
-
-      const dotFront = this._camDir.dot(this._toFront);
-      const dotBack  = this._camDir.dot(this._toBack);
-
-      const active = (dotFront >= d.threshold) ? "front" : "back";
-
-      let targetFront = (active === "front") ? d.frontBaseVol : 0;
-      let targetBack  = (active === "back")  ? d.backBaseVol  : 0;
-
-      if (active === "front" && dotFront >= d.lookMuteThreshold) targetFront = 0;
-      if (active === "back"  && dotBack  >= d.lookMuteThreshold) targetBack  = 0;
-
-      if (targetFront === this._lastTargetFront && targetBack === this._lastTargetBack) return;
-
-      this._lastTargetFront = targetFront;
-      this._lastTargetBack  = targetBack;
-
-      this._crossfadeTo(frontEl, backEl, targetFront, targetBack, d.fadeMs);
-    },
-
-    _setVol(el, v) {
-      el.setAttribute("sound", "volume", v);
-    },
-
-    _crossfadeTo(frontEl, backEl, vF, vB, ms) {
-      const t0 = performance.now();
-      const startF = (frontEl.getAttribute("sound")?.volume ?? 0);
-      const startB = (backEl.getAttribute("sound")?.volume ?? 0);
-
-      if (this._raf) cancelAnimationFrame(this._raf);
-
-      const step = () => {
-        const t = Math.min(1, (performance.now() - t0) / ms);
-        const e = t * t * (3 - 2 * t);
-
-        this._setVol(frontEl, startF + (vF - startF) * e);
-        this._setVol(backEl,  startB + (vB - startB) * e);
-
-        if (t < 1) this._raf = requestAnimationFrame(step);
-      };
-
-      this._raf = requestAnimationFrame(step);
     }
-  });
+
+    if (!frontEl.components.sound || !backEl.components.sound) return;
+
+    const cam = this._getActiveCamera();
+    if (!cam) return;
+
+    cam.getWorldDirection(this._camDir);
+    cam.getWorldPosition(this._camPos);
+
+    frontEl.object3D.getWorldPosition(this._frontPos);
+    backEl.object3D.getWorldPosition(this._backPos);
+
+    this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
+    this._toBack.copy(this._backPos).sub(this._camPos).normalize();
+
+    const dotFront = this._camDir.dot(this._toFront);
+    const dotBack  = this._camDir.dot(this._toBack);
+
+    const active = (dotFront >= d.threshold) ? "front" : "back";
+
+    let targetFront = (active === "front") ? d.frontBaseVol : 0;
+    let targetBack  = (active === "back")  ? d.backBaseVol  : 0;
+
+    // mute si tu regardes pile le son actif
+    if (active === "front" && dotFront >= d.lookMuteThreshold) targetFront = 0;
+    if (active === "back"  && dotBack  >= d.lookMuteThreshold) targetBack  = 0;
+
+    // ✅ anti-spam
+    if (targetFront === this._lastTargetFront && targetBack === this._lastTargetBack) return;
+
+    this._lastTargetFront = targetFront;
+    this._lastTargetBack  = targetBack;
+
+    this._crossfadeTo(frontEl, backEl, targetFront, targetBack, d.fadeMs);
+  },
+
+  _setVol(el, v) {
+    el.setAttribute("sound", "volume", v);
+  },
+
+  _crossfadeTo(frontEl, backEl, vF, vB, ms) {
+    const t0 = performance.now();
+    const startF = (frontEl.getAttribute("sound")?.volume ?? 0);
+    const startB = (backEl.getAttribute("sound")?.volume ?? 0);
+
+    if (this._raf) cancelAnimationFrame(this._raf);
+
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0) / ms);
+      const e = t * t * (3 - 2 * t);
+
+      this._setVol(frontEl, startF + (vF - startF) * e);
+      this._setVol(backEl,  startB + (vB - startB) * e);
+
+      if (t < 1) this._raf = requestAnimationFrame(step);
+    };
+
+    this._raf = requestAnimationFrame(step);
+  }
+});
+
 
   /* =========================
     turn-image-switch (inchangé)
   ========================= */
-  AFRAME.registerComponent("turn-image-switch", {
-    schema: {
-      front: { type: "selector" },
-      back: { type: "selector" },
-      scene: { type: "selector" },
-      threshold: { type: "number", default: 0.35 },
-      fadeMs: { type: "number", default: 450 }
-    },
+ AFRAME.registerComponent("turn-image-switch", {
+  schema: {
+    front: { type: "selector" },
+    back: { type: "selector" },
+    scene: { type: "selector" },
+    threshold: { type: "number", default: 0.35 },
+    fadeMs: { type: "number", default: 450 }
+  },
 
-    init() {
-      this.state = null;
-      this._raf = null;
+  init() {
+    this.state = null;
+    this._raf = null;
 
-      this._camDir = new THREE.Vector3();
-      this._camPos = new THREE.Vector3();
-      this._frontPos = new THREE.Vector3();
-      this._toFront = new THREE.Vector3();
+    this._camDir = new THREE.Vector3();
+    this._camPos = new THREE.Vector3();
+    this._frontPos = new THREE.Vector3();
+    this._toFront = new THREE.Vector3();
 
-      this._phaseWasVisible = false;
+    this._phaseWasVisible = false;
 
-      const ensureFade = (el) => {
-        if (!el) return;
-        el.setAttribute("material", "transparent", true);
-        if (el.getAttribute("material")?.opacity == null) el.setAttribute("material", "opacity", 1);
-      };
-      ensureFade(this.data.front);
-      ensureFade(this.data.back);
-    },
+    const ensureFade = (el) => {
+      if (!el) return;
+      el.setAttribute("material", "transparent", true);
+      if (el.getAttribute("material")?.opacity == null) el.setAttribute("material", "opacity", 1);
+    };
+    ensureFade(this.data.front);
+    ensureFade(this.data.back);
+  },
 
-    tick() {
-      const d = this.data;
-      const frontEl = d.front;
-      const backEl = d.back;
-      if (!frontEl || !backEl) return;
+  // ✅ VR SAFE camera
+  _getActiveCamera() {
+    const scene = this.el.sceneEl;
+    if (!scene || !scene.camera) return null;
 
-      const phaseVisible = !d.scene || d.scene.getAttribute("visible") !== false;
+    const r = scene.renderer;
+    const xr = r && r.xr;
 
-      if (!phaseVisible) {
-        if (this._phaseWasVisible) {
-          frontEl.setAttribute("visible", false);
-          backEl.setAttribute("visible", false);
-          this.state = null;
-        }
-        this._phaseWasVisible = false;
-        return;
-      }
-
-      if (!this._phaseWasVisible) {
-        this._phaseWasVisible = true;
-        this.state = (frontEl.getAttribute("visible") !== false) ? "front" : "back";
-        return;
-      }
-
-      const threeCam = this.el.sceneEl && this.el.sceneEl.camera;
-      if (!threeCam) return;
-
-      threeCam.getWorldDirection(this._camDir);
-      threeCam.getWorldPosition(this._camPos);
-
-      frontEl.object3D.getWorldPosition(this._frontPos);
-      this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
-
-      const dot = this._camDir.dot(this._toFront);
-      const next = (dot >= d.threshold) ? "front" : "back";
-
-      if (next !== this.state) {
-        this.state = next;
-        this._crossfade(
-          next === "front" ? frontEl : backEl,
-          next === "front" ? backEl : frontEl
-        );
-      }
-    },
-
-    _crossfade(onEl, offEl) {
-      const duration = this.data.fadeMs;
-      const t0 = performance.now();
-
-      onEl.setAttribute("visible", true);
-      offEl.setAttribute("visible", true);
-
-      const startOn  = (onEl.getAttribute("material")?.opacity ?? 0);
-      const startOff = (offEl.getAttribute("material")?.opacity ?? 1);
-
-      if (this._raf) cancelAnimationFrame(this._raf);
-
-      const step = () => {
-        const t = Math.min(1, (performance.now() - t0) / duration);
-        const e = t * t * (3 - 2 * t);
-
-        onEl.setAttribute("material", "opacity", startOn + (1 - startOn) * e);
-        offEl.setAttribute("material", "opacity", startOff * (1 - e));
-
-        if (t < 1) this._raf = requestAnimationFrame(step);
-        else offEl.setAttribute("visible", false);
-      };
-
-      this._raf = requestAnimationFrame(step);
+    if (xr && xr.isPresenting) {
+      return xr.getCamera(scene.camera);
     }
-  });
+    return scene.camera;
+  },
+
+  tick() {
+    const d = this.data;
+    const frontEl = d.front;
+    const backEl = d.back;
+    if (!frontEl || !backEl) return;
+
+    const phaseVisible = !d.scene || d.scene.getAttribute("visible") !== false;
+
+    if (!phaseVisible) {
+      if (this._phaseWasVisible) {
+        frontEl.setAttribute("visible", false);
+        backEl.setAttribute("visible", false);
+        this.state = null;
+      }
+      this._phaseWasVisible = false;
+      return;
+    }
+
+    if (!this._phaseWasVisible) {
+      this._phaseWasVisible = true;
+      this.state = (frontEl.getAttribute("visible") !== false) ? "front" : "back";
+      return;
+    }
+
+    const cam = this._getActiveCamera();
+    if (!cam) return;
+
+    cam.getWorldDirection(this._camDir);
+    cam.getWorldPosition(this._camPos);
+
+    frontEl.object3D.getWorldPosition(this._frontPos);
+    this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
+
+    const dot = this._camDir.dot(this._toFront);
+
+    const next = (dot >= d.threshold) ? "front" : "back";
+    if (next !== this.state) {
+      this.state = next;
+      this._crossfade(
+        next === "front" ? frontEl : backEl,
+        next === "front" ? backEl : frontEl
+      );
+    }
+  },
+
+  _crossfade(onEl, offEl) {
+    const duration = this.data.fadeMs;
+    const t0 = performance.now();
+
+    onEl.setAttribute("visible", true);
+    offEl.setAttribute("visible", true);
+
+    const startOn  = (onEl.getAttribute("material")?.opacity ?? 0);
+    const startOff = (offEl.getAttribute("material")?.opacity ?? 1);
+
+    if (this._raf) cancelAnimationFrame(this._raf);
+
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0) / duration);
+      const e = t * t * (3 - 2 * t);
+
+      onEl.setAttribute("material", "opacity", startOn + (1 - startOn) * e);
+      offEl.setAttribute("material", "opacity", startOff * (1 - e));
+
+      if (t < 1) this._raf = requestAnimationFrame(step);
+      else offEl.setAttribute("visible", false);
+    };
+
+    this._raf = requestAnimationFrame(step);
+  }
+});
+
 
   /* =========================
     ✅ AUDIO UNLOCK (FIX VR) — on ne pause jamais
@@ -622,7 +655,8 @@
         </a-plane>
 
         <!-- PC click -->
-        <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
+        <a-entity cursor="rayOrigin: entity" raycaster="objects: .clickable; far: 50"></a-entity>
+
       </a-camera>
 
       <!-- VR lasers -->
