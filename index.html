@@ -532,6 +532,7 @@ AFRAME.registerComponent("mute-when-looked-pro", {
 
       <a-asset-item id="bancModel" src="/EverydayVR/models/banc-no-texture.glb"></a-asset-item>
       <a-asset-item id="mannequin" src="/EverydayVR/models/mannequin-silouette.glb"></a-asset-item>
+      <a-asset-item id="trench" src="/EverydayVR/models/trench.glb"></a-asset-item>
       
       
 
@@ -673,8 +674,16 @@ AFRAME.registerComponent("mute-when-looked-pro", {
       <a-entity
         id="mannequin"
         gltf-model="#mannequin"
-        position="-1.380 0 -0.472"
-        scale="2 2 2">
+        position="-1.380 1.489 -0.472"
+        rotation="0 45 0"
+        scale="1.5 1.5 1.5">
+      </a-entity>
+      <a-entity
+        id="trench"
+        gltf-model="#trench"
+        position="-1.380 1.489 -0.472"
+        rotation="0 45 0"
+        scale="1.5 1.5 1.5">
       </a-entity>
 
       <a-entity id="seatPointPhase1" position="0.448 0.90 -2"></a-entity>
