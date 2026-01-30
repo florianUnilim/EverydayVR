@@ -595,7 +595,7 @@
       turn-image-switch="front: #imgFront; back: #imgBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
     >
       <!-- CAMERA -->
-      <a-camera id="cam" speed="0.15">
+      <a-camera id="cam" speed="0.15" look-controls="pointerLockEnabled: true">
 
         <!-- ✅ CROSSHAIR : DOIT ÊTRE DANS LA CAMERA (HUD) -->
         <a-entity id="crosshair"
@@ -603,7 +603,7 @@
           geometry="primitive: ring; radiusInner: 0.006; radiusOuter: 0.009"
           material="shader: flat; color: #ffffff; opacity: 0.9; transparent: true"
           visible="true"
-          look-controls="pointerLockEnabled: true">
+          >
         </a-entity>
 
         <!-- Paupières -->
