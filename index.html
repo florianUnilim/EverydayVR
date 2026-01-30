@@ -515,53 +515,31 @@
   /* =========================
     ✅ AUDIO UNLOCK (FIX VR) — on ne pause jamais
   ========================= */
-  const _unlockAudio = () => {
-    // resume audio context (VR)
-    try {
-      const ctx = AFRAME.audioContext;
-      if (ctx && ctx.state === "suspended") ctx.resume();
-    } catch (e) {}
+  let AUDIO_UNLOCKED = false;
 
-    // play (même si volume=0)
-    const f = document.querySelector("#soundFront")?.components?.sound;
-    const b = document.querySelector("#soundBack")?.components?.sound;
+const _unlockAudio = () => {
+  if (AUDIO_UNLOCKED) return;
+  AUDIO_UNLOCKED = true;
 
-    try { f?.playSound(); } catch (e) {}
-    try { b?.playSound(); } catch (e) {}
-  };
+  // 1) Resume AudioContext (OBLIGATOIRE sur casque)
+  try {
+    const ctx = AFRAME.audioContext;
+    if (ctx && ctx.state !== "running") ctx.resume();
+  } catch (e) {}
 
-  // Desktop
-  window.addEventListener("click", _unlockAudio, { once: true });
-  window.addEventListener("touchstart", _unlockAudio, { once: true });
+  // 2) Force playSound sur les 2 sons
+  const f = document.querySelector("#soundFront")?.components?.sound;
+  const b = document.querySelector("#soundBack")?.components?.sound;
 
-  // VR + manettes
-  document.addEventListener("DOMContentLoaded", () => {
-    const scene = document.querySelector("a-scene");
-    if (!scene) return;
+  try { f?.playSound(); } catch (e) {}
+  try { b?.playSound(); } catch (e) {}
 
-    scene.addEventListener("enter-vr", () => setTimeout(_unlockAudio, 50));
+  // 3) Cache le panneau
+  const gate = document.querySelector("#audioGate");
+  if (gate) gate.setAttribute("visible", false);
 
-    const hookControllers = () => {
-      const left = document.querySelector("#leftHand");
-      const right = document.querySelector("#rightHand");
-      [left, right].forEach((h) => {
-        if (!h) return;
-        h.addEventListener("triggerdown", _unlockAudio, { once: true });
-        h.addEventListener("gripdown", _unlockAudio, { once: true });
-      });
-    };
-
-    // après chargement, les entités mains existent sûr
-    scene.addEventListener("loaded", hookControllers);
-
-    // fallback canvas (Quest etc.)
-    scene.addEventListener("loaded", () => {
-      if (scene.canvas) {
-        scene.canvas.addEventListener("mousedown", _unlockAudio, { once: true });
-        scene.canvas.addEventListener("touchstart", _unlockAudio, { once: true });
-      }
-    });
-  });
+  console.log("[AUDIO] unlocked");
+};
 
   /* =========================
     ✅ CROSSHAIR : visible PC, caché VR
@@ -681,6 +659,22 @@
     <!-- Lumières -->
     <a-entity light="type: ambient; intensity: 0.8"></a-entity>
     <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
+
+    <!-- ✅ UI VR : bouton pour activer le son (visible seulement tant que pas unlock) -->
+<a-entity id="audioGate" position="0 1.6 -2" visible="true">
+  <a-plane width="1.4" height="0.45" material="shader: flat; color: #111; opacity: 0.85; transparent: true"></a-plane>
+
+  <a-text value="Appuie sur TRIGGER\npour activer le son" align="center" width="1.6" position="0 0 0.01" color="#FFF">
+  </a-text>
+
+  <!-- zone cliquable (laser VR) -->
+  <a-plane id="audioButton"
+           class="clickable"
+           width="1.4" height="0.45"
+           position="0 0 0.02"
+           material="transparent:true; opacity:0">
+  </a-plane>
+</a-entity>
 
     <!-- ===========================
       PHASE 1
