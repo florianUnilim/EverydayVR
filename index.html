@@ -608,11 +608,7 @@
 
       turn-image-switch="cam: #cam; front: #imgFront; back: #imgBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
     >
-
-      <!-- CAMERA -->
-      <a-camera id="cam" speed="0.15">
-
-        <!-- Son FRONT (positionnel) -->
+<!-- Son FRONT (positionnel) -->
         <a-entity
           id="soundFront"
           position="-0.197 0.564 -5.801"
@@ -625,6 +621,10 @@
           position="-0.06 -1.113 1.930"
           sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
         </a-entity>
+      <!-- CAMERA -->
+      <a-camera id="cam" speed="0.15">
+
+        
 
         <!-- Paupières -->
         <a-plane id="lidTop"
