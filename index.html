@@ -378,15 +378,18 @@
     let targetBack  = this.data.backBaseVol  * backWeight;
 
     // --- MUTE HARD sur l’émetteur "actif" (celui le plus présent) ---
-    const activeIsFront = frontWeight >= 0.5;
-    const activeDot = activeIsFront ? dotFront : dotBack;
+   // --- SWITCH FORCÉ selon ce que tu regardes ---
+// Si tu regardes FRONT -> on coupe FRONT et on met BACK à fond
+if (dotFront >= this.data.lookMuteThreshold) {
+  targetFront = 0;
+  targetBack  = this.data.backBaseVol;
+}
 
-    if (activeDot >= this.data.lookMuteThreshold) {
-      if (this.data.lookMuteHard) {
-        if (activeIsFront) targetFront = 0;
-        else targetBack = 0;
-      }
-    }
+// Si tu regardes BACK -> on coupe BACK et on met FRONT à fond
+if (dotBack >= this.data.lookMuteThreshold) {
+  targetBack  = 0;
+  targetFront = this.data.frontBaseVol;
+}
 
     // --- smoothing (évite les "clacs") ---
     const alpha = 1 - Math.pow(1 - this.data.smooth, Math.min(60, (dt || 16.67) / 16.67));
