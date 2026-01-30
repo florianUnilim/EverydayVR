@@ -518,13 +518,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <img id="bg-en-face"    src="/images/bg-en-face.png">
     </a-assets>
 
-    <!-- ✅ UI VR : clique / trigger pour activer le son -->
-    <a-entity id="audioGate" position="0 1.6 -2" visible="false">
-      <a-plane width="1.4" height="0.45" material="shader: flat; color: #111; opacity: 0.85; transparent: true"></a-plane>
-      <a-text value="Appuie sur TRIGGER\npour activer le son" align="center" width="1.6" position="0 0 0.01" color="#FFF"></a-text>
-      <a-plane id="audioButton" class="clickable" width="1.4" height="0.45" position="0 0 0.02"
-               material="transparent:true; opacity:0"></a-plane>
-    </a-entity>
+   
 
     <!-- ✅ SONS au niveau scène (silence au départ) -->
     <a-entity id="soundFront"
