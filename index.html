@@ -523,6 +523,26 @@
     const scene = document.querySelector("a-scene");
     if (scene) scene.addEventListener("enter-vr", _unlockAudio);
   });
+
+  document.addEventListener("DOMContentLoaded", () => {
+  const scene = document.querySelector("a-scene");
+  const crosshair = document.querySelector("#crosshair");
+  if (!scene || !crosshair) return;
+
+  // PC -> visible
+  crosshair.setAttribute("visible", true);
+
+  // En VR -> caché
+  scene.addEventListener("enter-vr", () => {
+    crosshair.setAttribute("visible", false);
+  });
+
+  // En sortant de VR -> réaffiché
+  scene.addEventListener("exit-vr", () => {
+    crosshair.setAttribute("visible", true);
+  });
+});
+
   </script>
 </head>
 
@@ -577,6 +597,12 @@
 
       turn-image-switch="cam: #cam; front: #imgFront; back: #imgBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
     >  
+    <a-entity id="crosshair"
+  position="0 0 -1"
+  geometry="primitive: ring; radiusInner: 0.006; radiusOuter: 0.009"
+  material="shader: flat; color: #ffffff; opacity: 0.9; transparent: true"
+  visible="true">
+</a-entity>
       <!-- CAMERA -->
       <a-camera id="cam" speed="0.15">
 
