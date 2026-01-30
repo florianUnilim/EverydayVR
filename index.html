@@ -380,16 +380,17 @@
     // --- MUTE HARD sur l’émetteur "actif" (celui le plus présent) ---
    // --- SWITCH FORCÉ selon ce que tu regardes ---
 // Si tu regardes FRONT -> on coupe FRONT et on met BACK à fond
-if (dotFront >= this.data.lookMuteThreshold) {
+// --- SWITCH FORCÉ selon ce que tu regardes LE PLUS ---
+if (dotFront > dotBack && dotFront >= this.data.lookMuteThreshold) {
+  // Tu regardes FRONT => FRONT coupé, BACK à fond
   targetFront = 0;
   targetBack  = this.data.backBaseVol;
-}
-
-// Si tu regardes BACK -> on coupe BACK et on met FRONT à fond
-if (dotBack >= this.data.lookMuteThreshold) {
+} else if (dotBack > dotFront && dotBack >= this.data.lookMuteThreshold) {
+  // Tu regardes BACK => BACK coupé, FRONT à fond
   targetBack  = 0;
   targetFront = this.data.frontBaseVol;
 }
+
 
     // --- smoothing (évite les "clacs") ---
     const alpha = 1 - Math.pow(1 - this.data.smooth, Math.min(60, (dt || 16.67) / 16.67));
