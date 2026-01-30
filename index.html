@@ -282,127 +282,84 @@
          => sans conflit, car tout est géré ici.
       3) Actif uniquement en phase2
     ========================================================= */
-   AFRAME.registerComponent("turn-sound-switch", {
+
+AFRAME.registerComponent("mute-when-looked-pro", {
   schema: {
-    cam:   { type: "selector" },
-    front: { type: "selector" },
-    back:  { type: "selector" },
-    scene: { type: "selector" },
+    cam: { type: "selector" },
 
-    // Mix front/back
-    threshold: { type: "number", default: 0.35 },
-    smooth: { type: "number", default: 0.14 },
+    // plus bas = zone plus large
+    threshold: { type: "number", default: 0.92 },
 
-    // ✅ MUTE HARD (vraiment coupé)
-    lookMuteThreshold: { type: "number", default: 0.65 }, // LARGE zone (0.6-0.75)
-    lookMuteHard: { type: "boolean", default: true },
+    onVolume: { type: "number", default: 1.0 },
+    offVolume: { type: "number", default: 0.0 },
 
-    // Volumes normaux
-    frontBaseVol: { type: "number", default: 0.8 },
-    backBaseVol:  { type: "number", default: 1.0 }
+    fadeMs: { type: "number", default: 120 }
   },
 
   init() {
-    this._q = new THREE.Quaternion();
-    this._forward = new THREE.Vector3();
+    const T = AFRAME.THREE;
+    this._q = new T.Quaternion();
+    this._forward = new T.Vector3();
+    this._camPos = new T.Vector3();
+    this._objPos = new T.Vector3();
+    this._toObj = new T.Vector3();
 
-    this._camPos = new THREE.Vector3();
-    this._frontPos = new THREE.Vector3();
-    this._backPos  = new THREE.Vector3();
-
-    this._toFront = new THREE.Vector3();
-    this._toBack  = new THREE.Vector3();
-
-    this._phaseWasVisible = false;
-
-    this._vFront = 0;
-    this._vBack  = 0;
+    this._currentTarget = null;
+    this._raf = null;
   },
 
-  tick(time, dt) {
-    const sceneEl = this.data.scene;
+  tick() {
     const camEl = this.data.cam;
-    const frontEl = this.data.front;
-    const backEl = this.data.back;
-    if (!camEl || !frontEl || !backEl) return;
+    if (!camEl) return;
 
-    const frontSound = frontEl.components.sound;
-    const backSound  = backEl.components.sound;
-
-    const phaseVisible = !sceneEl || sceneEl.getAttribute("visible") !== false;
-
-    if (!phaseVisible) {
-      if (this._phaseWasVisible) {
-        try { frontSound?.pauseSound(); } catch (e) {}
-        try { backSound?.pauseSound(); } catch (e) {}
-        frontEl.setAttribute("sound", "volume", 0);
-        backEl.setAttribute("sound", "volume", 0);
-      }
-      this._phaseWasVisible = false;
-      return;
-    }
-
-    if (!this._phaseWasVisible) {
-      try { frontSound?.playSound(); } catch (e) {}
-      try { backSound?.playSound(); } catch (e) {}
-      this._phaseWasVisible = true;
-    }
+    const soundComp = this.el.components.sound;
+    if (!soundComp) return;
 
     const camObj = camEl.object3D;
 
-    // direction regard
+    // direction du regard
     camObj.getWorldQuaternion(this._q);
     this._forward.set(0, 0, -1).applyQuaternion(this._q).normalize();
 
     // positions monde
     this._camPos.setFromMatrixPosition(camObj.matrixWorld);
-    this._frontPos.setFromMatrixPosition(frontEl.object3D.matrixWorld);
-    this._backPos.setFromMatrixPosition(backEl.object3D.matrixWorld);
+    this._objPos.setFromMatrixPosition(this.el.object3D.matrixWorld);
 
-    // vecteurs cam->front/back
-    this._toFront.copy(this._frontPos).sub(this._camPos).normalize();
-    this._toBack.copy(this._backPos).sub(this._camPos).normalize();
+    // vecteur cam -> son
+    this._toObj.copy(this._objPos).sub(this._camPos).normalize();
 
-    const dotFront = this._forward.dot(this._toFront);
-    const dotBack  = this._forward.dot(this._toBack);
+    const dot = this._forward.dot(this._toObj);
 
-    // --- MIX front/back (progressif) ---
-    const band = 0.30; // plus grand = transition plus douce
-    const frontWeight = THREE.MathUtils.clamp(
-      (dotFront - (this.data.threshold - band)) / (2 * band),
-      0, 1
-    );
-    const backWeight = 1 - frontWeight;
+    const target = (dot >= this.data.threshold) ? this.data.offVolume : this.data.onVolume;
 
-    let targetFront = this.data.frontBaseVol * frontWeight;
-    let targetBack  = this.data.backBaseVol  * backWeight;
+    // évite de relancer un fade à chaque frame
+    if (this._currentTarget === target) return;
+    this._currentTarget = target;
 
-    // --- MUTE HARD sur l’émetteur "actif" (celui le plus présent) ---
-   // --- SWITCH FORCÉ selon ce que tu regardes ---
-// Si tu regardes FRONT -> on coupe FRONT et on met BACK à fond
-// --- SWITCH FORCÉ selon ce que tu regardes LE PLUS ---
-if (dotFront > dotBack && dotFront >= this.data.lookMuteThreshold) {
-  // Tu regardes FRONT => FRONT coupé, BACK à fond
-  targetFront = 0;
-  targetBack  = this.data.backBaseVol;
-} else if (dotBack > dotFront && dotBack >= this.data.lookMuteThreshold) {
-  // Tu regardes BACK => BACK coupé, FRONT à fond
-  targetBack  = 0;
-  targetFront = this.data.frontBaseVol;
-}
+    this._fadeTo(target, this.data.fadeMs);
+  },
 
+  _fadeTo(target, ms) {
+    const soundComp = this.el.components.sound;
+    if (!soundComp) return;
 
-    // --- smoothing (évite les "clacs") ---
-    const alpha = 1 - Math.pow(1 - this.data.smooth, Math.min(60, (dt || 16.67) / 16.67));
-    this._vFront = this._vFront + (targetFront - this._vFront) * alpha;
-    this._vBack  = this._vBack  + (targetBack  - this._vBack)  * alpha;
+    // manière la plus safe d’avoir le volume actuel
+    const cur = (this.el.getAttribute("sound")?.volume ?? 1);
 
-    // clamp sécurité
-    if (this._vFront < 0.0005) this._vFront = 0;
-    if (this._vBack  < 0.0005) this._vBack  = 0;
+    const t0 = performance.now();
+    if (this._raf) cancelAnimationFrame(this._raf);
 
-    frontEl.setAttribute("sound", "volume", this._vFront);
-    backEl.setAttribute("sound", "volume", this._vBack);
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0) / ms);
+      const e = t * t * (3 - 2 * t); // smoothstep
+      const v = cur + (target - cur) * e;
+
+      this.el.setAttribute("sound", "volume", v);
+
+      if (t < 1) this._raf = requestAnimationFrame(step);
+    };
+
+    this._raf = requestAnimationFrame(step);
   }
 });
 
@@ -613,18 +570,21 @@ if (dotFront > dotBack && dotFront >= this.data.lookMuteThreshold) {
       turn-image-switch="cam: #cam; front: #imgFront; back: #imgBack; scene: #phase2; threshold: 0.35; fadeMs: 450"
     >
 <!-- Son FRONT (positionnel) -->
-        <a-entity
-          id="soundFront"
-          position="-0.197 0.564 -5.801"
-          sound="src: url(sons/test-son.mp3); autoplay: true; loop: true; positional: true; volume: 0.8;">
-        </a-entity>
 
-        <!-- Son BACK (positionnel) -->
+
         <a-entity
-          id="soundBack"
-          position="-0.06 -1.113 1.930"
-          sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;">
-        </a-entity>
+  id="soundFront"
+  position="-0.197 0.564 -5.801"
+  sound="src: url(sons/test-son.mp3); autoplay: true; loop: true; positional: true; volume: 0.8;"
+  mute-when-looked-pro="cam:#cam; threshold:0.92; onVolume:0.8; offVolume:0; fadeMs:120">
+</a-entity>
+
+<a-entity
+  id="soundBack"
+  position="-0.06 -1.113 1.930"
+  sound="src: url(sons/chuchotement-sound-effect.mp3); autoplay: true; loop: true; positional: true; volume: 1;"
+  mute-when-looked-pro="cam:#cam; threshold:0.92; onVolume:1; offVolume:0; fadeMs:120">
+</a-entity>
       <!-- CAMERA -->
       <a-camera id="cam" speed="0.15">
 
